@@ -7,7 +7,10 @@
     "start": "next start",
     "lint": "next lint",
     "clean": "node scripts/clean.mjs",
-    "build": "npm run clean && next build"
+    "build": "npm run clean && next build",
+    "prepare": "husky",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "@prisma/client": "^7.3.0",
@@ -20,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^25.2.0",
     "@types/react": "^19.2.10",
+    "husky": "^9.1.7",
     "typescript": "^5.9.3"
   }
 }
