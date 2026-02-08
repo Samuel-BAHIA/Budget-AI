@@ -13,17 +13,20 @@
     "check": "npm run typecheck && npm run build"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
     "next": "14.2.5",
     "next-auth": "^4.24.13",
-    "prisma": "^7.3.0",
+    "pg": "^8.18.0",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
   "devDependencies": {
     "@types/node": "^25.2.0",
     "@types/react": "^19.2.10",
+    "dotenv": "^17.2.4",
     "husky": "^9.1.7",
+    "prisma": "^7.3.0",
     "typescript": "^5.9.3"
   }
 }

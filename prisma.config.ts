@@ -1,6 +1,10 @@
-import { defineConfig } from "prisma/config";
+import "dotenv/config";
+import { defineConfig, env } from "prisma/config";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
-  // Prisma reads DATABASE_URL from your environment (.env / .env.local / Vercel env vars)
+  // Prisma 7: connection URLs are configured here (not in schema.prisma)
+  datasource: {
+    url: env("DATABASE_URL"),
+  },
 });
