@@ -26,11 +26,6 @@ export const authOptions: NextAuthOptions = {
   // (NextAuth will warn/error if it's missing.)
   secret: process.env.NEXTAUTH_SECRET,
 
-  // In some hosting environments (including serverless) NextAuth needs to trust
-  // forwarded headers to infer the correct host/protocol.
-  // Safe for common deployments like Vercel.
-  trustHost: true as any,
-
   providers: [
     GoogleProvider({
       clientId: requiredEnv("GOOGLE_CLIENT_ID"),
