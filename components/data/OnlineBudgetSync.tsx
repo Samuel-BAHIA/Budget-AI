@@ -247,7 +247,7 @@ function deepMergePreferNewer(a: any, b: any): any {
   return b;
 }
 
-function mergeSnapshots(server: Snapshot | null, local: Snapshot): Snapshot {(server: Snapshot | null, local: Snapshot): Snapshot {
+function mergeSnapshots(server: Snapshot | null, local: Snapshot): Snapshot {
   const merged: Snapshot = { v: 1, storage: { ...(server?.storage ?? {}) } };
 
   for (const [k, localRaw] of Object.entries(local.storage)) {
