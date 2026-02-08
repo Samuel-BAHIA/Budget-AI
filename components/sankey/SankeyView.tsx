@@ -14,7 +14,11 @@ import { formatEUR } from "@/components/utils/format";
 
 // Sankey is a layout-dependent visualization (ResizeObserver, measured container sizes, etc.).
 // Rendering it client-only avoids SSR hydration mismatches.
-const SimpleSankey = dynamic(() => import("@/components/ui/SimpleSankey"), { ssr: false });
+//
+// NOTE: We explicitly map to `m.default`.
+// In some bundling / caching edge-cases, Next can end up treating the module as a namespace object
+// and the implicit default resolution fails at runtime (then the router falls back to error boundaries).
+const SimpleSankey = dynamic(() => import("@/components/ui/SimpleSankey").then((m) => m.default), { ssr: false });
 
 /**
  * Sankey (données réelles)

@@ -12,6 +12,9 @@ const PREFIX = "test";
 // --- Sync meta (used to resolve conflicts between local + cloud) ---
 export const keySyncMeta = `${PREFIX}.__syncMeta.v1`;
 
+// --- Local-only sync state (NOT synced to cloud) ---
+export const keyLocalSyncState = "__budget.localSyncState.v1";
+
 // --- Patrimoine / locations ---
 export const keyAssetsPerson = (personId: string) => `${PREFIX}.assets.${personId}`;
 export const keyRentalsPerson = (personId: string) => `${PREFIX}.rentals.${personId}`;
