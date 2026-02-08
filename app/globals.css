@@ -1,0 +1,316 @@
+/* --- PATCH: Editable zone visual cue (add forms) --- */
+.editZone {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+
+  /* White container so the inputs (grey) are visually distinct */
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.editZone:hover {
+  border-color: rgba(0,0,0,0.2);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+.editZone:focus-within {
+  border-color: rgba(0,0,0,0.35);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+  transform: translateY(-1px);
+}
+
+.editZone .btnGhost:active {
+  transform: translateY(1px);
+}
+
+.editZoneHint {
+  font-size: 12px;
+  opacity: 0.7;
+  padding-left: 2px;
+}
+
+/* --- PATCH: Segmented switch + link button + compact money inputs --- */
+.segmentedSwitch {
+  display: flex;
+  width: 100%;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(0,0,0,0.04);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+.segmentedSwitchBtn {
+  flex: 1;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  color: rgba(0,0,0,0.75);
+}
+.segmentedSwitchBtn.isActive {
+  background: rgba(0,0,0,0.92);
+  color: white;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+}
+.linkBtn {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  color: rgba(0,0,0,0.70);
+  font-weight: 600;
+}
+.linkBtn:hover { color: rgba(0,0,0,0.90); }
+
+.moneyInputCompact {
+  width: 110px;
+  max-width: 110px;
+}
+.miniAddBtn {
+  width: 110px;
+  max-width: 110px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+/* --- END PATCH --- */
+
+
+/* Prevent global horizontal scroll on small screens.
+   Horizontal scrolling should only happen inside dedicated scrollers. */
+@media (max-width: 740px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+.input.periodCompact{max-width:92px;}
+
+
+/* Biens: show actions only on hover/focus/click (no layout shift) */
+.assetCard .assetActions{
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+.assetCard:hover .assetActions,
+.assetCard:focus-within .assetActions,
+.assetCard[data-active="1"] .assetActions{
+  opacity: 1;
+  pointer-events: auto;
+}
+
+
+/* Custom blocks remove: discreet red X, no background */
+.customRemoveX{
+  background: transparent;
+  border: none;
+  color: rgba(200, 60, 60, 0.9);
+  font-size: 18px;
+  line-height: 18px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.customRemoveX:hover{
+  color: rgba(200, 60, 60, 1);
+}
+
+
+/* Inline naming field for custom blocks (no height shift) */
+.customNameInline{
+  border: none;
+  border-bottom: 1px solid #ddd;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 2px;
+  height: 18px;
+  outline: none;
+}
+.customNameInline:focus{
+  border-bottom-color: #111;
+}
+
+
+/* FIX: custom name editor layout (keep within column, icons side-by-side) */
+.customNameInline{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.03);
+  padding: 2px 6px;
+  box-sizing: border-box;
+}
+.customNameInput{
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+  line-height: 16px;
+  padding: 0 2px;
+}
+.customNameActions{
+  display:flex;
+  gap:4px;
+  flex: 0 0 auto;
+}
+.customNameOk, .customNameDel{
+  border:none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 14px;
+  padding: 0 2px;
+}
+.customNameOk{ color: rgba(0,0,0,0.55); }
+.customNameOk:hover{ color: rgba(0,0,0,0.85); }
+.customNameDel{ color: rgba(200, 60, 60, 0.9); }
+.customNameDel:hover{ color: rgba(200, 60, 60, 1); }
+
+
+.customNameInline{ max-width: 100%; }
+.customNameEdit{
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 13px;
+  line-height: 13px;
+}
+.customNameEdit:hover{ opacity: 1; }
+
+
+/* Custom title edit: same width as value field, actions below aligned right */
+.customNameInline{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+.customNameInput{
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.03);
+  padding: 6px 10px;
+}
+.customNameActionsBelow{
+  display:flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+
+/* Tweak: custom title input should feel like a label (compact), while keeping actions below */
+.customNameInline{
+  gap: 4px;
+}
+.customNameInput{
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.03);
+  font-size: 12px;
+  line-height: 16px;
+  height: 22px;
+}
+.customNameActionsBelow{
+  margin-top: 2px;
+}
+
+
+/* Prevent overflow inside grid columns */
+.customNameInline{ min-width: 0; }
+.customNameInput{ min-width: 0; }
+
+
+/* Match custom title input width to money inputs */
+.customNameInline{ width:110px; max-width:110px; }
+.customNameInput{ width:110px; max-width:110px; }
+
+
+.customTopIcons{
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+
+
+/* Wizard step slide transitions */
+.wizardStepAnim{
+  width: 100%;
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(.2,.7,.2,1);
+  animation-fill-mode: both;
+}
+.wizardStepAnim.animNext{ animation-name: wizardSlideInRight; }
+.wizardStepAnim.animPrev{ animation-name: wizardSlideInLeft; }
+
+@keyframes wizardSlideInRight{
+  from{ transform: translateX(32px); opacity: 0; }
+  to{ transform: translateX(0); opacity: 1; }
+}
+@keyframes wizardSlideInLeft{
+  from{ transform: translateX(-32px); opacity: 0; }
+  to{ transform: translateX(0); opacity: 1; }
+}
+
+
+/* Small add button aligned with money inputs */
+.btnAddSmall{
+  height: 44px;
+  border: 1px solid rgba(0,0,0,.18);
+  border-radius: 14px;
+  background: rgba(0,0,0,.02);
+  padding: 0 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btnAddSmall:hover{ background: rgba(0,0,0,.04); }
+
+/* Inline icon buttons for custom line title */
+.customIconBtn{
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+  opacity: .8;
+}
+.customIconBtn:hover{ opacity: 1; }
+.customIconBtn.danger{ color: #d11; }
+
+
+.checkRow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 14px;
+  background: rgba(0,0,0,.02);
+}
+.checkRow input{ width:16px; height:16px; }

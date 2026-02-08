@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Minimal per-user persistent storage.
+// We use session.user.id (mapped to email in NextAuth callbacks) as the key.
+model BudgetState {
+  userId    String   @id
+  dataJson  Json
+  updatedAt DateTime @updatedAt
+}
