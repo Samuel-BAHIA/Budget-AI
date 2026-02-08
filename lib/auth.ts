@@ -1,6 +1,18 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    // Throw a clear error so Vercel logs make the fix obvious.
+    throw new Error(
+      `[auth] Missing environment variable: ${name}. ` +
+        `Set it in your deployment environment (e.g. Vercel → Project → Settings → Environment Variables).`
+    );
+  }
+  return value;
+}
+
 /**
  * Central place for NextAuth configuration.
  *
@@ -10,10 +22,19 @@ import GoogleProvider from "next-auth/providers/google";
  * special route options.
  */
 export const authOptions: NextAuthOptions = {
+  // Required for JWT/session signing in production.
+  // (NextAuth will warn/error if it's missing.)
+  secret: process.env.NEXTAUTH_SECRET,
+
+  // In some hosting environments (including serverless) NextAuth needs to trust
+  // forwarded headers to infer the correct host/protocol.
+  // Safe for common deployments like Vercel.
+  trustHost: true as any,
+
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: requiredEnv("GOOGLE_CLIENT_ID"),
+      clientSecret: requiredEnv("GOOGLE_CLIENT_SECRET"),
     }),
   ],
 

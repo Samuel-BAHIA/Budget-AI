@@ -152,76 +152,24 @@ function safeParseJSON(x: string) {
   }
 }
 
-function parseMaybeDateMs(x: unknown): number | null {
-  if (typeof x === "number" && Number.isFinite(x)) return x;
-  if (typeof x === "string") {
-    const t = Date.parse(x);
-    return Number.isFinite(t) ? t : null;
-  }
-  return null;
-}
-
-function getUpdatedAtMs(obj: any): number | null {
-  if (!obj || typeof obj !== "object") return null;
-  // Common timestamp fields used across apps/stores
-  const candidates = [
-    (obj as any).updatedAt,
-    (obj as any).updated_at,
-    (obj as any).lastModifiedAt,
-    (obj as any).lastModified,
-    (obj as any).modifiedAt,
-    (obj as any).modified_at,
-    (obj as any).lastUpdatedAt,
-    (obj as any).last_updated_at,
-  ];
-  for (const c of candidates) {
-    const ms = parseMaybeDateMs(c);
-    if (ms != null) return ms;
-  }
-  return null;
-}
-
-function deepMergePreferNewer(a: any, b: any): any {
-  // Merge strategy:
+function deepMerge(a: any, b: any): any {
+  // Merge strategy: "b" (local) wins on conflicts.
   // - Objects: recursive
-  // - Arrays:
-  //    * If items are objects with `id`, union by id and prefer the most recently updated item
-  //      when both sides contain the same id.
-  //    * Otherwise, union unique values (stable-ish).
-  // - Primitives: prefer b (the right side).
+  // - Arrays: if array items are objects with `id`, merge/union by id; otherwise concat unique values.
+  // - Primitives: b
   if (Array.isArray(a) && Array.isArray(b)) {
     const aObjs = a.every((x) => x && typeof x === "object" && "id" in x);
     const bObjs = b.every((x) => x && typeof x === "object" && "id" in x);
-
     if (aObjs && bObjs) {
       const map = new Map<string, any>();
-      for (const item of a) map.set(String((item as any).id), item);
-
+      for (const item of a) map.set(String(item.id), item);
       for (const item of b) {
-        const id = String((item as any).id);
+        const id = String(item.id);
         const prev = map.get(id);
-        if (!prev) {
-          map.set(id, item);
-          continue;
-        }
-
-        // Prefer the newest version (by updatedAt-ish field) for conflicts on the same object id.
-        const prevTs = getUpdatedAtMs(prev);
-        const nextTs = getUpdatedAtMs(item);
-
-        if (prevTs != null && nextTs != null) {
-          const older = prevTs <= nextTs ? prev : item;
-          const newer = prevTs <= nextTs ? item : prev;
-          map.set(id, deepMergePreferNewer(older, newer));
-        } else {
-          // Fallback: right side wins but still deep-merge.
-          map.set(id, deepMergePreferNewer(prev, item));
-        }
+        map.set(id, prev ? deepMerge(prev, item) : item);
       }
-
       return Array.from(map.values());
     }
-
     // primitive arrays (or mixed): union by JSON stringified value
     const seen = new Set<string>();
     const out: any[] = [];
@@ -239,7 +187,7 @@ function deepMergePreferNewer(a: any, b: any): any {
   if (aObj && bObj) {
     const out: any = { ...a };
     for (const [k, v] of Object.entries(b)) {
-      out[k] = k in out ? deepMergePreferNewer((out as any)[k], v) : v;
+      out[k] = k in out ? deepMerge((out as any)[k], v) : v;
     }
     return out;
   }
@@ -262,7 +210,7 @@ function mergeSnapshots(server: Snapshot | null, local: Snapshot): Snapshot {
     const a = safeParseJSON(serverRaw);
     const b = safeParseJSON(localRaw);
     if (a.ok && b.ok) {
-      merged.storage[k] = JSON.stringify(deepMergePreferNewer(a.value, b.value));
+      merged.storage[k] = JSON.stringify(deepMerge(a.value, b.value));
     } else {
       merged.storage[k] = localRaw;
     }
@@ -439,9 +387,20 @@ export default function OnlineBudgetSync() {
           return;
         }
 
-        // Default behavior: always merge automatically (no prompt).
-        await resolve("merge", server, local);
-        return;
+        // Ask user for the safest outcome.
+        if (!cancelled) {
+          setConflict({ server, local });
+          resolveRef.current = (choice) => {
+            resolve(choice, server, local)
+              .catch(() => {
+                // ignore
+              })
+              .finally(() => {
+                setConflict(null);
+                resolveRef.current = null;
+              });
+          };
+        }
       } finally {
         if (!cancelled) setIsHydrating(false);
       }
