@@ -245,7 +245,7 @@ function reconcileTombstonesWithLocalKeys(now = Date.now()) {
   writeLocalSyncState({ v: 1, lastKeys: currentKeys });
 }
 
-function clearLocalPrefix() {
+export function clearLocalPrefix() {
   if (!isBrowser()) return;
   const toDelete: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
