@@ -25,7 +25,14 @@ export async function GET() {
   } catch (err: any) {
     console.error("[GET /api/budget-state]", err);
     return NextResponse.json(
-      { error: "Internal error", details: String(err?.message ?? err) },
+      {
+        error: "Internal error",
+        name: err?.name,
+        message: err?.message ?? String(err),
+        // Prisma errors often carry `code` and `meta`.
+        code: err?.code,
+        meta: err?.meta,
+      },
       { status: 500 }
     );
   }
@@ -57,7 +64,13 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("[POST /api/budget-state]", err);
     return NextResponse.json(
-      { error: "Internal error", details: String(err?.message ?? err) },
+      {
+        error: "Internal error",
+        name: err?.name,
+        message: err?.message ?? String(err),
+        code: err?.code,
+        meta: err?.meta,
+      },
       { status: 500 }
     );
   }
