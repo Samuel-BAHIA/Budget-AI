@@ -39,8 +39,21 @@ export const STORAGE_PREFIX = "test.";
 // A synced key that records deletions (tombstones) so deletes do not resurrect across devices.
 const TOMBSTONES_KEY = `${STORAGE_PREFIX}__tombstones.v1`;
 
-// Local-only state used to detect deletions (missing keys) on this device.
-type LocalSyncState = { v: 1; lastKeys: string[] };
+// When a JSON value contains an array of objects with an `id`, we also need deletion semantics
+// at the item level (ex: deleting a foyer inside `test.foyers.v1`).
+//
+// We encode those deletions as tombstones with a composite key:
+//   "<storageKey>::id::<id>" -> deletedAt
+const ID_TOMBSTONE_SEP = "::id::";
+
+// Local-only state used to detect deletions on this device.
+// - lastKeys: detect deleted localStorage KEYS
+// - lastIdsByKey: detect deleted ITEMS inside JSON arrays that have objects with an `id` field
+type LocalSyncState = {
+  v: 1;
+  lastKeys: string[];
+  lastIdsByKey?: Record<string, string[]>;
+};
 
 /** Runtime guard: localStorage is only available in the browser. */
 export function isBrowser(): boolean {
@@ -54,6 +67,7 @@ export function exportSnapshot(): Snapshot {
 
   // Ensure deletions are captured as tombstones before taking a snapshot.
   reconcileTombstonesWithLocalKeys();
+  reconcileItemTombstonesWithLocalState();
 
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -242,9 +256,99 @@ function reconcileTombstonesWithLocalKeys(now = Date.now()) {
   }
 
   if (changed) writeTombstonesToStorage(tombstones);
-  writeLocalSyncState({ v: 1, lastKeys: currentKeys });
+  // Preserve any item-level tracking already stored.
+  writeLocalSyncState({ v: 1, lastKeys: currentKeys, lastIdsByKey: prev?.lastIdsByKey ?? {} });
 }
 
+function makeItemTombstoneKey(storageKey: string, id: string): string {
+  return `${storageKey}${ID_TOMBSTONE_SEP}${id}`;
+}
+
+function splitItemTombstoneKey(tombstoneKey: string): { storageKey: string; id: string } | null {
+  const idx = tombstoneKey.indexOf(ID_TOMBSTONE_SEP);
+  if (idx <= 0) return null;
+  return {
+    storageKey: tombstoneKey.slice(0, idx),
+    id: tombstoneKey.slice(idx + ID_TOMBSTONE_SEP.length),
+  };
+}
+
+/**
+ * Detect deletions of items INSIDE JSON arrays with an `id` field.
+ *
+ * Example: `test.foyers.v1` is a JSON array of `{ id, ... }`.
+ * Deleting one foyer does NOT remove the localStorage key, so key-level tombstones are not enough.
+ *
+ * We track the last seen ids per storage key (local-only), and create tombstones like:
+ *   "test.foyers.v1::id::f-123" -> deletedAt
+ */
+function reconcileItemTombstonesWithLocalState(now = Date.now()) {
+  if (!isBrowser()) return;
+
+  const prev = safeReadLocalSyncState();
+  const prevIdsByKey: Record<string, string[]> = prev?.lastIdsByKey ?? {};
+  const nextIdsByKey: Record<string, string[]> = { ...prevIdsByKey };
+
+  const tombstones = readTombstonesFromStorage();
+  let changed = false;
+
+  // Scan current snapshot keys and detect arrays of objects with `id`.
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+    if (key === TOMBSTONES_KEY) continue;
+
+    const raw = localStorage.getItem(key);
+    if (raw == null) continue;
+
+    const parsed = safeParseJSON(raw);
+    if (!parsed.ok) continue;
+
+    const value = parsed.value;
+    if (!Array.isArray(value)) continue;
+    const isObjWithId = value.every((x) => x && typeof x === "object" && !Array.isArray(x) && "id" in x);
+    if (!isObjWithId) continue;
+
+    const currentIds = value.map((x: any) => String(x.id));
+    nextIdsByKey[key] = currentIds;
+
+    const prevIds = new Set(prevIdsByKey[key] ?? []);
+    const currentSet = new Set(currentIds);
+
+    // Missing ids since last export are deletions.
+    for (const id of prevIds) {
+      if (!currentSet.has(id)) {
+        const tk = makeItemTombstoneKey(key, id);
+        const existing = tombstones[tk] ?? 0;
+        if (now > existing) {
+          tombstones[tk] = now;
+          changed = true;
+        }
+      }
+    }
+
+    // If an id exists again, remove tombstone (user recreated/restored it).
+    for (const id of currentSet) {
+      const tk = makeItemTombstoneKey(key, id);
+      if (tombstones[tk] != null) {
+        delete tombstones[tk];
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) writeTombstonesToStorage(tombstones);
+
+  // Persist local-only tracking.
+  const prevKeys = prev?.lastKeys ?? [];
+  writeLocalSyncState({ v: 1, lastKeys: prevKeys, lastIdsByKey: nextIdsByKey });
+}
+
+/**
+ * Remove ALL localStorage keys that belong to the budget app (STORAGE_PREFIX).
+ *
+ * Used on logout to avoid re-importing stale guest data after a new sign-in.
+ */
 export function clearLocalPrefix() {
   if (!isBrowser()) return;
   const toDelete: string[] = [];
@@ -269,6 +373,26 @@ function safeParseJSON(x: string) {
   } catch {
     return { ok: false as const, value: null };
   }
+}
+
+function collectTombstonedIds(storageKey: string, tombstones: Tombstones): Set<string> {
+  const out = new Set<string>();
+  const prefix = `${storageKey}${ID_TOMBSTONE_SEP}`;
+  for (const k of Object.keys(tombstones)) {
+    if (!k.startsWith(prefix)) continue;
+    const info = splitItemTombstoneKey(k);
+    if (info?.id) out.add(info.id);
+  }
+  return out;
+}
+
+function applyItemTombstonesToJsonValue(storageKey: string, value: any, tombstones: Tombstones): any {
+  if (!Array.isArray(value)) return value;
+  const isObjWithId = value.every((x) => x && typeof x === "object" && !Array.isArray(x) && "id" in x);
+  if (!isObjWithId) return value;
+  const deletedIds = collectTombstonedIds(storageKey, tombstones);
+  if (deletedIds.size === 0) return value;
+  return value.filter((x: any) => !deletedIds.has(String(x.id)));
 }
 
 /**
@@ -359,7 +483,12 @@ export function mergeSnapshots(server: Snapshot | null, local: Snapshot): Snapsh
     const a = safeParseJSON(serverRaw);
     const b = safeParseJSON(localRaw);
     if (a.ok && b.ok) {
-      base.storage[k] = JSON.stringify(deepMerge(a.value, b.value));
+      // Apply item-level tombstones before AND after merge to avoid resurrecting deletions
+      // inside JSON arrays (ex: deleting one foyer inside `test.foyers.v1`).
+      const serverValue = applyItemTombstonesToJsonValue(k, a.value, mergedT);
+      const localValue = applyItemTombstonesToJsonValue(k, b.value, mergedT);
+      const mergedValue = deepMerge(serverValue, localValue);
+      base.storage[k] = JSON.stringify(applyItemTombstonesToJsonValue(k, mergedValue, mergedT));
     } else {
       base.storage[k] = localRaw;
     }
@@ -383,6 +512,8 @@ export function applySnapshot(snapshot: Snapshot) {
     desired.add(k);
   }
 
+  const tombstones = readTombstonesFromSnapshot(snapshot);
+
   // Apply incoming values.
   for (const [k, v] of Object.entries(snapshot?.storage ?? {})) {
     if (!k.startsWith(STORAGE_PREFIX)) continue;
@@ -393,10 +524,25 @@ export function applySnapshot(snapshot: Snapshot) {
     }
   }
 
+  // Item-level deletions: if some items inside an array were deleted on another device,
+  // we must remove them locally (otherwise deepMerge would resurrect them).
+  for (const k of desired) {
+    if (k === TOMBSTONES_KEY) continue;
+    const raw = localStorage.getItem(k);
+    if (!raw) continue;
+    const parsed = safeParseJSON(raw);
+    if (!parsed.ok) continue;
+    const cleaned = applyItemTombstonesToJsonValue(k, parsed.value, tombstones);
+    if (cleaned !== parsed.value) {
+      try {
+        localStorage.setItem(k, JSON.stringify(cleaned));
+      } catch {}
+    }
+  }
+
   // Enforce deletions:
   // - remove any local keys that are not present in the snapshot
   // - and remove any keys listed in the synced tombstones
-  const tombstones = readTombstonesFromSnapshot(snapshot);
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const k = localStorage.key(i);
     if (!k || !k.startsWith(STORAGE_PREFIX)) continue;
@@ -412,6 +558,7 @@ export function applySnapshot(snapshot: Snapshot) {
 
   // Keep local-only deletion detector aligned after apply.
   reconcileTombstonesWithLocalKeys();
+  reconcileItemTombstonesWithLocalState();
 
   window.dispatchEvent(new CustomEvent("app:storage", { detail: { key: "*", ts: Date.now() } }));
 }

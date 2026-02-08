@@ -37,3 +37,23 @@ When local and cloud snapshots differ, we **AUTO-MERGE**:
 - Primitive conflicts → local wins.
 
 There is **no UI popup**.
+
+## Deletions (important)
+
+Because a deletion can be represented as "absence" (which would otherwise be re-imported from the other device),
+the sync engine uses **tombstones** stored inside the synced snapshot.
+
+### Key deletions
+
+- Stored in `test.__tombstones.v1` as:
+  - `"test.some.key" -> deletedAt`
+- If a key is tombstoned, it is removed from the merged snapshot and also removed locally during apply.
+
+### Item deletions inside arrays
+
+Some important keys are JSON arrays of objects with an `id` (example: `test.foyers.v1`).
+Deleting an item from the array does **not** remove the localStorage key, so we also track deletions per-item.
+
+- Tombstone format:
+  - `"<storageKey>::id::<id>" -> deletedAt`
+- During merge/apply, any array item whose id is tombstoned is filtered out (so it cannot resurrect).
