@@ -8,7 +8,9 @@ import { bottomNavTabs } from "@/components/nav/menu";
 import { useMounted, useMediaQuery } from "@/components/utils/hooks";
 
 export default function BottomNav() {
-  const pathname = usePathname();
+  // `usePathname()` can be null during router boot/hydration in some edge cases.
+  // Keep a safe fallback to prevent runtime crashes in layout bundles.
+  const pathname = usePathname() ?? "";
   const totals = useMenuTotals();
   const mounted = useMounted();
   const isMobile = useMediaQuery("(max-width: 720px)");
