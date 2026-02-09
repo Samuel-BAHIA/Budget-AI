@@ -10,9 +10,14 @@ type Props = {
   children?: React.ReactNode;
 };
 
-const navItems: { href: string; label: string; icon: string }[] = [
+type NavItem = { href: string; label: string; icon: string; indent?: number };
+
+const navItems: NavItem[] = [
   // Le menu "Foyers" remplace l'ancien "Accueil".
   { href: "/", label: "Foyers", icon: "🏠" },
+  // Le wizard "Création d’un foyer" n'est plus déclenché depuis l'accueil.
+  // Il est maintenant accessible via : Foyer → + Nouveau.
+  { href: "/onboarding", label: "+ Nouveau", icon: "➕", indent: 1 },
   // Le menu "Budget" est conservé mais renommé.
   { href: "/dashboard", label: "Suivi Budget", icon: "📊" },
 ];
@@ -58,6 +63,7 @@ export default function SidebarDrawer({ open, onClose, children }: Props) {
                 href={it.href}
                 className={`mobileSidebarNavItem ${active ? "isActive" : ""}`}
                 onClick={onClose}
+                style={it.indent ? { paddingLeft: 14 + it.indent * 18 } : undefined}
               >
                 <span className="mobileSidebarNavIcon" aria-hidden="true">{it.icon}</span>
                 <span className="mobileSidebarNavLabel">{it.label}</span>

@@ -36,6 +36,8 @@ export const sidebarNavGroups: MenuGroup[] = [
     // Keep title empty: we don't want a visible "Dashboard" header in the sidebar.
     title: "",
     items: [
+      // Le wizard "Création d’un foyer" est accessible via : Foyers → + Nouveau.
+      { href: "/onboarding", label: "+ Nouveau", icon: "➕" },
       { href: "/dashboard", label: "Suivi Budget", icon: "📊" },
     ],
   },
