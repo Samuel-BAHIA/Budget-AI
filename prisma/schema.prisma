@@ -4,6 +4,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Use DATABASE_URL from the environment (.env.local in dev)
+  url      = env("DATABASE_URL")
 }
 
 // Minimal per-user persistent storage.
