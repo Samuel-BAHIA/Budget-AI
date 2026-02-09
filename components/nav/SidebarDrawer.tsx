@@ -11,15 +11,15 @@ type Props = {
 };
 
 const navItems: { href: string; label: string; icon: string }[] = [
-  { href: "/", label: "Accueil", icon: "⌂" },
-  { href: "/dashboard", label: "Budget", icon: "📊" },
-  { href: "/utilisateurs", label: "Utilisateurs", icon: "👤" },
-  { href: "/foyers", label: "Foyers", icon: "🏠" },
-  { href: "/graph/view", label: "Graph", icon: "📈" },
+  // Le menu "Foyers" remplace l'ancien "Accueil".
+  { href: "/", label: "Foyers", icon: "🏠" },
+  // Le menu "Budget" est conservé mais renommé.
+  { href: "/dashboard", label: "Suivi Budget", icon: "📊" },
 ];
 
 export default function SidebarDrawer({ open, onClose, children }: Props) {
-  const pathname = usePathname();
+  // `usePathname()` can be null during router boot/hydration in some edge cases.
+  const pathname = usePathname() ?? "";
 
   // Close on ESC
   useEffect(() => {

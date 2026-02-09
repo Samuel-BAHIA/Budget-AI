@@ -25,8 +25,10 @@ export type MenuGroup = {
  */
 
 export const bottomNavTabs: MenuNavItem[] = [
-  { href: "/", label: "Accueil", icon: "⌂" },
-  { href: "/dashboard", label: "Budget", icon: "📊" },
+  // Le menu "Foyers" remplace l'ancien "Accueil".
+  { href: "/", label: "Foyers", icon: "🏠" },
+  // Le menu "Budget" est conservé mais renommé.
+  { href: "/dashboard", label: "Suivi Budget", icon: "📊" },
 ];
 
 export const sidebarNavGroups: MenuGroup[] = [
@@ -34,7 +36,7 @@ export const sidebarNavGroups: MenuGroup[] = [
     // Keep title empty: we don't want a visible "Dashboard" header in the sidebar.
     title: "",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: "📊" },
+      { href: "/dashboard", label: "Suivi Budget", icon: "📊" },
     ],
   },
 ];

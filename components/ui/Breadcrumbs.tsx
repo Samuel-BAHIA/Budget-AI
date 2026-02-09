@@ -77,13 +77,13 @@ export function useBreadcrumbCrumbs(): Crumb[] {
             : /* postes | type (variant) */ "Simplifiée";
       const href = seg === "personne" ? "/dashboard/personne" : seg === "globale" ? "/dashboard/globale" : "/dashboard/postes";
       return [
-        { href: "/", label: "Accueil" },
+        { href: "/", label: "Foyers" },
         { href, label },
       ];
     }
 
     const segments = pathname.split("?")[0].split("#")[0].split("/").filter(Boolean);
-    const out: Crumb[] = [{ href: "/", label: "Accueil" }];
+    const out: Crumb[] = [{ href: "/", label: "Foyers" }];
 
     const hrefFor = (i: number) => "/" + segments.slice(0, i + 1).join("/");
 

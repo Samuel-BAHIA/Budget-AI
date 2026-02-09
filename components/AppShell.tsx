@@ -99,7 +99,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (pathname?.startsWith("/depenses")) return "Dépenses";
     // Dashboard title is handled by the "Vue" selector in the topbar.
     if (pathname?.startsWith("/dashboard")) return "";
-    return crumbs.length ? crumbs[crumbs.length - 1].label : "Accueil";
+    return crumbs.length ? crumbs[crumbs.length - 1].label : "Foyers";
   }, [pathname, crumbs]);
 
   return (
