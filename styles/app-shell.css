@@ -4376,3 +4376,18 @@ html, body {
 .mobileSidebarPanel .topbarSettingsItem:hover {
   background: rgba(255,255,255,0.08);
 }
+
+/* Mobile: bottom navigation bar removed */
+@media (max-width: 720px) {
+  :root {
+    --bottomnav-h: 0px;
+  }
+
+  .bottomNav {
+    display: none !important;
+  }
+
+  .main {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+}
