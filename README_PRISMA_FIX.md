@@ -33,5 +33,7 @@ npx prisma generate
 
 ## Note
 
-Le fichier `lib/prisma.ts` essaye maintenant de faire un **auto-heal en dev** :
-si le client Prisma n'existe pas encore, il tente de lancer `npx prisma generate` une fois.
+Le projet evite ce probleme via les scripts:
+
+- `postinstall`: lance `prisma generate`
+- `build`: relance `prisma generate` avant `next build`

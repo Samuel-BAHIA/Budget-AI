@@ -1,23 +1,69 @@
-# Menu-test (Next.js)
+# Budget-AI (Next.js + Prisma 7)
 
-## Fix for: `Error: Cannot find module './948.js'`
-This error is almost always caused by a corrupted/stale Next.js build cache in `.next`.
+## Commandes stables
 
-The scripts in this repo now **auto-clean `.next`** before `dev` and `build`.
-
-### Run
 ```bash
 npm install
 npm run dev
 ```
 
-If you still see weird cache errors, also delete `node_modules` and reinstall:
 ```bash
-rmdir /s /q node_modules .next  # Windows (cmd)
-npm install
-npm run dev
+npm run check
 ```
 
-## Notes
+```bash
+npm run build
+npm run start
+```
 
-* Commit forcé demandé par l'utilisateur.
+## Ce qui est fiabilise (dev + prod)
+
+- `predev` nettoie `.next` avant `next dev` pour eviter les erreurs cache (`Cannot find module './*.js'`).
+- `build` nettoie puis regenere Prisma Client avant `next build`.
+- `postinstall` regenere Prisma Client apres installation de dependances.
+- Le hook Git `pre-push` execute `npm run check`.
+
+## Prisma 7 (important)
+
+- Ne pas remettre `datasource.url` dans `prisma/schema.prisma` (interdit en Prisma 7).
+- L'URL DB est configuree dans `prisma.config.ts`.
+- Les migrations sont separees du build:
+
+```bash
+npm run db:migrate:deploy
+```
+
+### Erreur dev connue et corrigee
+
+Si tu vois:
+
+`PrismaClientConstructorValidationError: Using engine type "client" requires either "adapter" or "accelerateUrl"`
+
+alors:
+- le runtime Prisma est parti en mode `client`,
+- et il lui faut un adapter PostgreSQL (ou Accelerate).
+
+Le projet gere maintenant ce cas dans `lib/prisma.ts`:
+- tentative automatique avec `@prisma/adapter-pg` + `DATABASE_URL`,
+- fallback de securite si necessaire.
+
+### Si Neon est inaccessible en dev (timeout reseau)
+
+Symptome possible:
+- `PrismaClientKnownRequestError`
+- `code: 'ETIMEDOUT'` sur `/api/budget-state`
+
+Comportement voulu:
+- l'API `budget-state` degrade en mode local (pas de crash global),
+- GET renvoie un fallback local,
+- POST renvoie un statut de degradation au lieu d'un 500.
+
+Donc:
+- warning/timeout reseau DB != bug front/build,
+- l'app reste utilisable localement meme sans connexion Neon.
+
+## Documentation projet
+
+- `AI_HANDOFF.md`: erreurs deja rencontrees + regles a ne pas casser.
+- `README_PRISMA7.md`: rappel Prisma 7.
+- `AUTH_DB_SETUP.md`: auth + Neon.

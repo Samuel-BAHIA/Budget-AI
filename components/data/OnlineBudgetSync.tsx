@@ -29,6 +29,7 @@ import {
   pushServerSnapshot,
   stableHash,
   withSyncedMeta,
+  appendSyncLog,
 } from "@/components/data/sync/budgetSyncEngine";
 
 export default function OnlineBudgetSync() {
@@ -78,6 +79,7 @@ export default function OnlineBudgetSync() {
 
     (async () => {
       try {
+        appendSyncLog({ level: "info", code: "hydrate.start", message: "Starting initial sync import" });
         setIsHydrating(true);
 
         const [serverRaw, local] = await Promise.all([
@@ -132,6 +134,13 @@ export default function OnlineBudgetSync() {
           lastSyncedUserId: userId!,
           lastSyncedHash: stableHash(final),
         });
+      } catch (err: any) {
+        appendSyncLog({
+          level: "error",
+          code: "hydrate.fail",
+          message: err?.message ?? String(err),
+          details: { name: err?.name, stack: err?.stack },
+        });
       } finally {
         if (!cancelled) setIsHydrating(false);
       }
@@ -166,7 +175,9 @@ export default function OnlineBudgetSync() {
         const final = withSyncedMeta(snap, userId!);
 
         // Best-effort push (offline is OK).
-        pushServerSnapshot(final).catch(() => {});
+        pushServerSnapshot(final).catch((err) => {
+          appendSyncLog({ level: "warn", code: "push.fail", message: (err as any)?.message ?? String(err) });
+        });
       }, 800);
     };
 

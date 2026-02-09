@@ -2,7 +2,7 @@
  * Prisma client helper.
  *
  * Goal: keep the DB access layer boring and reliable.
- * - Uses DATABASE_URL from prisma/schema.prisma (env("DATABASE_URL")).
+ * - Uses DATABASE_URL from prisma.config.ts.
  * - Caches the client in dev to avoid exhausting connections during HMR.
  */
 
@@ -18,6 +18,7 @@
 export type PrismaClientType = any;
 
 type PrismaClientCtor = new (args?: unknown) => PrismaClientType;
+type PrismaPgCtor = new (config: { connectionString: string }) => unknown;
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClientType;
@@ -29,28 +30,61 @@ function getPrismaCtor(): PrismaClientCtor {
   return prismaPkg.PrismaClient;
 }
 
-export function getPrisma(): PrismaClientType {
-  // Some environments (or .env files) may set PRISMA_CLIENT_ENGINE_TYPE=client.
-  // That mode requires a Driver Adapter or Prisma Accelerate configuration.
-  // This app uses the standard query engine, so we hard-fallback to a safe
-  // default to avoid runtime 500s like:
-  // "Using engine type \"client\" requires either \"adapter\" or \"accelerateUrl\"..."
+function tryBuildPgAdapter() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const adapterPkg = require("@prisma/adapter-pg") as { PrismaPg: PrismaPgCtor };
+    return new adapterPkg.PrismaPg({ connectionString });
+  } catch {
+    return null;
+  }
+}
+
+function isAdapterRequiredError(error: unknown) {
+  const message = String((error as any)?.message ?? error ?? "");
+  return message.includes('requires either "adapter" or "accelerateUrl"');
+}
+
+function createPrismaClient(): PrismaClientType {
+  const PrismaClient = getPrismaCtor();
   const engineType = process.env.PRISMA_CLIENT_ENGINE_TYPE;
   const accelerateUrl = process.env.PRISMA_ACCELERATE_URL || process.env.ACCELERATE_URL;
+
+  // If engine type is explicitly "client", prefer a real adapter first.
   if (engineType === "client" && !accelerateUrl) {
-    // Force the classic query-engine mode.
+    const adapter = tryBuildPgAdapter();
+    if (adapter) {
+      return new PrismaClient({ log: ["error"], adapter });
+    }
+    // Last-resort fallback to classic query-engine mode when adapter cannot be built.
     process.env.PRISMA_CLIENT_ENGINE_TYPE = "binary";
   }
 
-  const PrismaClient = getPrismaCtor();
+  try {
+    return new PrismaClient({ log: ["error"] });
+  } catch (error) {
+    // Some environments resolve client-engine mode at generation/runtime.
+    // Retry once with pg adapter when constructor explicitly asks for it.
+    if (isAdapterRequiredError(error)) {
+      const adapter = tryBuildPgAdapter();
+      if (adapter) {
+        return new PrismaClient({ log: ["error"], adapter });
+      }
+    }
+    throw error;
+  }
+}
 
+export function getPrisma(): PrismaClientType {
   if (process.env.NODE_ENV !== "production") {
     if (!globalForPrisma.prisma) {
-      globalForPrisma.prisma = new PrismaClient({ log: ["error"] });
+      globalForPrisma.prisma = createPrismaClient();
     }
     return globalForPrisma.prisma;
   }
 
   // In production, instantiate per process/isolate (standard Prisma guidance).
-  return new PrismaClient({ log: ["error"] });
+  return createPrismaClient();
 }

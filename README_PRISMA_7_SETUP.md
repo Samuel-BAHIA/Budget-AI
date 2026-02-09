@@ -6,8 +6,8 @@ This project is configured for **Prisma 7**.
 
 - `datasource.url` is **no longer allowed** in `prisma/schema.prisma`.
 - The database URL is configured in `prisma.config.ts`.
-- Prisma 7 requires passing either a driver **adapter** (direct DB connection) or an `accelerateUrl`
-  to `new PrismaClient()`.
+- If `PRISMA_CLIENT_ENGINE_TYPE=client` is set without adapter/accelerate config, runtime can crash.
+- This repo applies a safe fallback in `lib/prisma.ts` to avoid that failure mode.
 
 ## Install required dependencies
 
@@ -37,4 +37,13 @@ npx prisma generate
 
 ```bash
 npm run dev
+```
+
+## Build safety
+
+- `build` does not run migrations.
+- Deploy migrations manually with:
+
+```bash
+npm run db:migrate:deploy
 ```

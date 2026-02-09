@@ -57,3 +57,39 @@ Deleting an item from the array does **not** remove the localStorage key, so we 
 - Tombstone format:
   - `"<storageKey>::id::<id>" -> deletedAt`
 - During merge/apply, any array item whose id is tombstoned is filtered out (so it cannot resurrect).
+
+## Timestamp-aware merges (cross-device edits)
+
+Some JSON arrays contain objects with an `id` and an `updatedAt` (or `_updatedAt`) field.
+Example: foyers + people in `test.foyers.v1`.
+
+When both devices edited the **same object id**, we resolve conflicts like this:
+
+- If both objects have a numeric `updatedAt`/`_updatedAt`:
+  - keep the **newest whole object** (highest timestamp)
+- Otherwise:
+  - fall back to the recursive `deepMerge` rules (local wins on primitive conflicts)
+
+**Why whole-object replace?**
+Deep-merging fields without per-field timestamps can accidentally mix a newer change with an older one.
+Replacing the object gives deterministic results and avoids “half merged” states.
+
+## Important pitfall we fixed (tombstones-only snapshots)
+
+A snapshot may contain only the synced tombstones key (`test.__tombstones.v1`) but no real budget data.
+This must be treated as “empty data”, otherwise the app can think there is budget data and keep auto-merging/pushing
+in a loop.
+
+So `hasAnyBudgetData()` and `stableHash()` explicitly ignore:
+
+- `keySyncMeta` (sync meta)
+- `test.__tombstones.v1` (deletions metadata)
+
+## If you change keys / prefix (AI-friendly checklist)
+
+1. Update the prefix in **one place**:
+   - `components/data/storageKeys.ts` (PREFIX)
+   - `components/data/sync/budgetSyncEngine.ts` (STORAGE_PREFIX)
+2. Ensure both still match (`PREFIX + "." === STORAGE_PREFIX`).
+3. NEVER include local-only keys in snapshots (ex: `keyLocalSyncState` must stay unprefixed).
+4. If you add new “meta” keys under the prefix, exclude them from `hasAnyBudgetData()` and `stableHash()`.

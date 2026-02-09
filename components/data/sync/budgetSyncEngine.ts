@@ -46,6 +46,41 @@ const TOMBSTONES_KEY = `${STORAGE_PREFIX}__tombstones.v1`;
 //   "<storageKey>::id::<id>" -> deletedAt
 const ID_TOMBSTONE_SEP = "::id::";
 
+// Local-only ring buffer of sync events (NOT synced, helps debugging across builds).
+const SYNC_LOG_KEY = "__budget.syncLog.v1";
+
+export type SyncLogEntry = {
+  ts: number;
+  level: "info" | "warn" | "error";
+  code: string;
+  message?: string;
+  details?: any;
+};
+
+export function appendSyncLog(entry: Omit<SyncLogEntry, "ts"> & { ts?: number }) {
+  if (!isBrowser()) return;
+  try {
+    const raw = localStorage.getItem(SYNC_LOG_KEY);
+    const prev = raw ? (JSON.parse(raw) as any[]) : [];
+    const next = Array.isArray(prev) ? prev.slice(-199) : [];
+    next.push({ ts: entry.ts ?? Date.now(), ...entry });
+    localStorage.setItem(SYNC_LOG_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+export function readSyncLog(): SyncLogEntry[] {
+  if (!isBrowser()) return [];
+  try {
+    const raw = localStorage.getItem(SYNC_LOG_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as SyncLogEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 // Local-only state used to detect deletions on this device.
 // - lastKeys: detect deleted localStorage KEYS
 // - lastIdsByKey: detect deleted ITEMS inside JSON arrays that have objects with an `id` field
@@ -131,6 +166,7 @@ export function hasAnyBudgetData(snapshot: Snapshot | null): boolean {
   for (const k of Object.keys(snapshot.storage ?? {})) {
     if (!k.startsWith(STORAGE_PREFIX)) continue;
     if (k === keySyncMeta) continue;
+    if (k === TOMBSTONES_KEY) continue;
     return true;
   }
   return false;
@@ -142,7 +178,7 @@ export function hasAnyBudgetData(snapshot: Snapshot | null): boolean {
  */
 export function stableHash(snapshot: Snapshot): string {
   const keys = Object.keys(snapshot.storage)
-    .filter((k) => k.startsWith(STORAGE_PREFIX) && k !== keySyncMeta)
+    .filter((k) => k.startsWith(STORAGE_PREFIX) && k !== keySyncMeta && k !== TOMBSTONES_KEY)
     .sort();
 
   let acc = "";
@@ -414,12 +450,26 @@ export function deepMerge(serverValue: any, localValue: any): any {
 
     if (aObjs && bObjs) {
       const map = new Map<string, any>();
-      for (const item of a) map.set(String(item.id), item);
+      for (const item of a) map.set(String((item as any).id), item);
+
       for (const item of b) {
-        const id = String(item.id);
+        const id = String((item as any).id);
         const prev = map.get(id);
-        map.set(id, prev ? deepMerge(prev, item) : item);
+
+        // Timestamp-aware merge:
+        // If both sides carry an `updatedAt` (or `_updatedAt`) number, keep the newest whole object
+        // to avoid losing more recent edits across devices.
+        const prevTs = prev && typeof prev === "object" ? ((prev as any).updatedAt ?? (prev as any)._updatedAt) : undefined;
+        const itemTs =
+          item && typeof item === "object" ? ((item as any).updatedAt ?? (item as any)._updatedAt) : undefined;
+
+        if (typeof prevTs === "number" && typeof itemTs === "number" && prevTs !== itemTs) {
+          map.set(id, itemTs > prevTs ? item : prev);
+        } else {
+          map.set(id, prev ? deepMerge(prev, item) : item);
+        }
       }
+
       return Array.from(map.values());
     }
 

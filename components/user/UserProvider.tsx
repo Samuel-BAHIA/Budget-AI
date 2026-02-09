@@ -8,8 +8,10 @@ export type Person = {
   isPrimary?: boolean;
   birthDate?: string; // YYYY-MM-DD
   lastName?: string;
+  /** ms since epoch. Used by sync engine to resolve cross-device conflicts. */
+  updatedAt?: number;
 };
-export type Foyer = { id: string; name: string; people: Person[] };
+export type Foyer = { id: string; name: string; people: Person[]; /** ms since epoch */ updatedAt?: number };
 
 export type ActiveSelection =
   | { kind: "global" }
@@ -206,7 +208,8 @@ function ensureDefaultDataBrowser(): { foyers: Foyer[]; activeFoyerId: string; a
   }
 
   // Default: 1 foyer "Foyer 1" avec 2 personnes, pour que la vue Global soit disponible.
-  const p1: Person = { id: uid("p"), name: "Personne 1", isPrimary: true };
+  const now = Date.now();
+    const p1: Person = { id: uid("p"), name: "Personne 1", isPrimary: true, updatedAt: now };
   const p2: Person = { id: uid("p"), name: "Personne 2", isPrimary: false };
   const f1: Foyer = { id: uid("f"), name: "Foyer 1", people: [p1, p2] };
   const data = { foyers: [f1], activeFoyerId: f1.id, activeSelection: { kind: "global" } as ActiveSelection };
@@ -313,8 +316,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addFoyer = () => {
-    const p1: Person = { id: uid("p"), name: "Personne 1", isPrimary: true };
-    const f: Foyer = { id: uid("f"), name: "", people: [p1] };
+    const now = Date.now();
+    const p1: Person = { id: uid("p"), name: "Personne 1", isPrimary: true, updatedAt: now };
+    const f: Foyer = { id: uid("f"), name: "", people: [p1], updatedAt: now };
     setFoyers((prev) => normalizeFoyerNames([...(prev ?? []), f]));
     setActiveFoyerId(f.id);
     setActiveSelectionState({ kind: "person", personId: p1.id });
@@ -346,8 +350,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       prev.map((f) => {
         if (f.id !== foyerId) return f;
         const nextNum = (f.people?.length ?? 0) + 1;
-        const p: Person = { id: uid("p"), name: n || `Personne ${nextNum}`, isPrimary: false };
-        return { ...f, people: [...(f.people ?? []), p] };
+        const now = Date.now();
+        const p: Person = { id: uid("p"), name: n || `Personne ${nextNum}`, isPrimary: false, updatedAt: now };
+        return { ...f, updatedAt: now, people: [...(f.people ?? []), p] };
       })
     );
   };
@@ -361,7 +366,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         const people = f.people ?? [];
         return {
           ...f,
-          people: people.map((p) => (p.id === personId ? { ...p, name: n } : p)),
+          updatedAt: Date.now(),
+          people: people.map((p) => (p.id === personId ? { ...p, name: n, updatedAt: Date.now() } : p)),
         };
       })
     );
@@ -374,7 +380,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         const people = f.people ?? [];
         return {
           ...f,
-          people: people.map((p) => (p.id === personId ? { ...p, ...patch } : p)),
+          updatedAt: Date.now(),
+          people: people.map((p) => (p.id === personId ? { ...p, ...patch, updatedAt: Date.now() } : p)),
         };
       })
     );
@@ -389,7 +396,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         const nextPeople = people.filter((p) => p.id !== personId);
         if (nextPeople.length === people.length) return f;
         cleanupPersonAssets(personId);
-        return { ...f, people: nextPeople };
+        return { ...f, updatedAt: Date.now(), people: nextPeople };
       })
     );
 
@@ -417,15 +424,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       ? clean
       : [{ name: "Personne 1" }];
 
+    const now = Date.now();
     const people: Person[] = safe.map((p, idx) => ({
       id: uid("p"),
       name: p.name,
       birthDate: "birthDate" in p ? p.birthDate : undefined,
       lastName: "lastName" in p ? p.lastName : undefined,
       isPrimary: idx === 0,
+      updatedAt: now,
     }));
 
-    const foyer: Foyer = { id: uid("f"), name: "", people };
+    const foyer: Foyer = { id: uid("f"), name: "", people, updatedAt: now };
     setFoyers((prev) => normalizeFoyerNames([...(prev ?? []), foyer]));
     setActiveFoyerId(foyer.id);
     setActiveSelectionState(people.length > 1 ? { kind: "global" } : { kind: "person", personId: people[0].id });

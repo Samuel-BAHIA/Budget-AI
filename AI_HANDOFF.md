@@ -21,6 +21,36 @@ Regle:
 Regle:
 - Si tu reintroduis `url = env("DATABASE_URL")` dans le schema, `prisma` plante (P1012).
 
+## 2bis) Erreur runtime Prisma en dev: engine "client"
+
+- Symptome:
+  - `/api/budget-state` renvoie 500
+  - `PrismaClientConstructorValidationError: Using engine type "client" requires either "adapter" or "accelerateUrl"`
+
+Cause:
+- selon l'environnement, Prisma peut se retrouver en mode `client` au runtime.
+
+Etat voulu:
+- `lib/prisma.ts` doit:
+  - tenter `new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) })`
+  - et garder un fallback robuste.
+
+Regle:
+- Ne simplifie pas `lib/prisma.ts` en retirant cette gestion, sinon le bug revient en dev.
+
+## 2ter) Neon indisponible en dev (ETIMEDOUT)
+
+- Symptome:
+  - `/api/budget-state` peut timeout (`ETIMEDOUT`) selon reseau/VPN/firewall.
+
+Etat voulu:
+- `app/api/budget-state/route.ts` doit degrader proprement:
+  - GET: fallback local (pas 500)
+  - POST: statut degrade (pas 500 bloquant)
+
+Regle:
+- Ne retransforme pas ces cas reseau en erreurs 500 bruyantes; l'app est local-first.
+
 ## 3) Build vs migrations: ne pas coupler `build` et `migrate deploy`
 
 - Le hook `pre-push` lance `npm run check`.
@@ -58,3 +88,9 @@ npm run check
 ```
 
 Puis push normal (sans `--no-verify`) pour verifier le hook pre-push.
+
+## Scripts a ne pas casser
+
+- `predev` doit rester actif pour nettoyer `.next` avant `next dev`.
+- `postinstall` doit rester actif pour garantir `prisma generate` apres install.
+- `build` doit rester sans migration DB (migrations manuelles via `db:migrate:deploy`).

@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run clean",
     "dev": "next dev",
     "start": "next start",
     "lint": "next lint",
     "clean": "node scripts/clean.mjs",
     "db:migrate:deploy": "prisma migrate deploy",
     "build": "npm run clean && prisma generate && next build",
+    "postinstall": "prisma generate",
     "prepare": "husky",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build"

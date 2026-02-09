@@ -11,6 +11,14 @@ export const dynamic = "force-dynamic";
 const TTL_DAYS = 30;
 const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000;
 
+function isDbUnavailableError(err: any) {
+  const code = String(err?.code ?? "");
+  const message = String(err?.message ?? "");
+  // ETIMEDOUT is the most common adapter-pg timeout in local/dev.
+  // P1001 covers common Prisma connection failures with standard engines.
+  return code === "ETIMEDOUT" || code === "P1001" || message.includes("ETIMEDOUT");
+}
+
 function purgeDeleted(value: any, purgeBefore: number): any {
   if (Array.isArray(value)) {
     return value
@@ -48,6 +56,11 @@ export async function GET() {
 
     return NextResponse.json({ data: row?.dataJson ?? null });
   } catch (err: any) {
+    if (isDbUnavailableError(err)) {
+      console.warn("[GET /api/budget-state] DB unavailable, fallback to local-only mode");
+      // Local-first fallback: keep app usable when Neon is unreachable.
+      return NextResponse.json({ data: null, degraded: true, reason: "db_unavailable" }, { status: 200 });
+    }
     console.error("[GET /api/budget-state]", err);
     return NextResponse.json(
       { error: "Internal error", name: err?.name, message: err?.message ?? String(err) },
@@ -83,6 +96,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
+    if (isDbUnavailableError(err)) {
+      console.warn("[POST /api/budget-state] DB unavailable, skipping sync write");
+      // Do not fail hard in local/dev when DB is unreachable.
+      return NextResponse.json({ ok: false, degraded: true, reason: "db_unavailable" }, { status: 202 });
+    }
     console.error("[POST /api/budget-state]", err);
     return NextResponse.json(
       {
