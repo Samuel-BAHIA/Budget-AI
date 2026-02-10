@@ -460,24 +460,50 @@ function MobileWizardBreadcrumbPortal(props: {
 }) {
   if (!props.enabled) return null;
 
+  // Keep the active crumb centered (horizontal scroll) when the step changes.
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const btn = activeRef.current;
+    if (!btn) return;
+    // Center the active step in the scroll area.
+    btn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [props.currentStep]);
+
   const bar = (
     <div className="wizardCrumbBar" role="navigation" aria-label="Étapes">
-      <div className="wizardCrumbInner">
-        {props.visibleSteps.map((s, idx) => {
-          const isActive = s.step === props.currentStep;
-          return (
-            <button
-              key={s.step}
-              className={"wizardCrumbItem" + (isActive ? " active" : "")}
-              onClick={() => props.onGo(s.step)}
-              type="button"
-            >
-              <span className="wizardCrumbNum">{idx + 1}</span>
-              <span className="wizardCrumbTxt">{s.label}</span>
-              <span className="wizardCrumbSep">›</span>
-            </button>
-          );
-        })}
+      <div className="wizardCrumbPanel">
+        <div ref={innerRef} className="wizardCrumbInner" aria-label="Fil d’étapes">
+          {/*
+            NOTE: Navigation arrows are now displayed on the wizard page itself
+            (left/right of the content). The breadcrumb bar stays focused on
+            the "carousel" effect only.
+          */}
+          {(() => {
+            const currentIdx = Math.max(0, props.visibleSteps.findIndex((s) => s.step === props.currentStep));
+            return props.visibleSteps.map((s, idx) => {
+              const isActive = s.step === props.currentStep;
+              const dist = idx - currentIdx;
+              const distClass = `dist${Math.min(3, Math.abs(dist))}`;
+              return (
+                <button
+                  key={s.step}
+                  ref={isActive ? (el) => {
+                    activeRef.current = el;
+                  } : undefined}
+                  className={"wizardCrumbItem " + distClass + (isActive ? " active" : "")}
+                  onClick={() => props.onGo(s.step)}
+                  type="button"
+                >
+                  <span className="wizardCrumbNum">{idx + 1}</span>
+                  <span className="wizardCrumbTxt">{s.label}</span>
+                  <span className="wizardCrumbSep">›</span>
+                </button>
+              );
+            });
+          })()}
+        </div>
       </div>
     </div>
   );
@@ -876,16 +902,106 @@ export default function OnboardingWizard() {
     });
   }, [isTenant, isOwner, hasCar]);
 
+  // Swipe navigation (mobile): allow sliding between wizard steps.
+  const currentVisibleIdx = useMemo(
+    () => Math.max(0, visibleSteps.findIndex((s) => s.step === step)),
+    [visibleSteps, step]
+  );
+  const prevVisibleStep = currentVisibleIdx > 0 ? visibleSteps[currentVisibleIdx - 1]?.step : undefined;
+  const nextVisibleStep = currentVisibleIdx < visibleSteps.length - 1 ? visibleSteps[currentVisibleIdx + 1]?.step : undefined;
+
+  const swipeRef = useRef<{ x: number; y: number; active: boolean; blocked: boolean }>({
+    x: 0,
+    y: 0,
+    active: false,
+    blocked: false,
+  });
+
+  const onWizardTouchStart = (e: any) => {
+    if (!e?.touches || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const target = e.target as HTMLElement | null;
+    const blocked = !!target?.closest?.("input, textarea, select") || !!target?.closest?.("[data-disable-swipe]");
+    swipeRef.current = { x: t.clientX, y: t.clientY, active: true, blocked };
+  };
+
+  const onWizardTouchEnd = (e: any) => {
+    if (!swipeRef.current.active) return;
+    const { x, y, blocked } = swipeRef.current;
+    swipeRef.current.active = false;
+    if (blocked || !e?.changedTouches || e.changedTouches.length !== 1) return;
+
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x;
+    const dy = t.clientY - y;
+
+    // Horizontal swipe threshold.
+    if (Math.abs(dx) < 80 || Math.abs(dy) > 70) return;
+    // Swipe navigation uses the same handlers as the arrow buttons so we keep
+    // the exact same side effects (markCompleted/persist) as the old buttons.
+    if (dx < 0) goNext();
+    if (dx > 0) goPrev();
+  };
+
+  // ---------------------------------------------------------------------
+  // Navigation helpers (arrows + swipe)
+  // Goal: remove the old "Suivant/Retour" buttons while preserving behavior.
+  // ---------------------------------------------------------------------
+  const canGoNext = useMemo(() => {
+    if (step === "people") return canContinuePeople;
+    if (step === "coupleStatus" && householdType === "couple") return !!coupleStatus;
+    return true;
+  }, [step, canContinuePeople, householdType, coupleStatus]);
+
+  const goPrev = () => {
+    if (step === "people") {
+      router.push("/");
+      return;
+    }
+    if (prevVisibleStep) setStep(prevVisibleStep);
+  };
+
+  const goNext = () => {
+    if (!canGoNext) return;
+
+    // Special case: first step creates the foyer and establishes the household type.
+    if (step === "people") {
+      markCompleted("people");
+
+      const needed = Math.min(2, draftPeople.length || 1);
+      const type = needed === 2 ? "couple" : "single";
+      setHouseholdType(type);
+
+      if (type === "single") {
+        markSkipped("coupleStatus");
+        setCoupleStatus(undefined);
+      }
+
+      const foyer = createFoyerWithPeople(draftPeople.slice(0, needed));
+      setActiveFoyer(foyer);
+      setFoyerId(foyer);
+      writeFoyerProfile({ foyerId: foyer, householdType: type, coupleStatus });
+
+      setStep(type === "couple" ? "coupleStatus" : "incomes");
+      return;
+    }
+
+    // Default: mark completed + persist, then move to next visible step.
+    // (Some steps also auto-advance via selection buttons, which still works.)
+    markCompleted(step);
+    persistProfile();
+    if (nextVisibleStep) setStep(nextVisibleStep);
+  };
+
 return (
     <>
       {mounted && (
         <MobileWizardBreadcrumbPortal visibleSteps={visibleSteps} currentStep={step} onGo={(s) => setStep(s)} enabled={true} />
       )}
       <div className="wizardWrap">
-        <div className="wizardCrumbSpacer" />
       <div className="wizardLayout">
       <div className="card" style={{ padding: 14 }}>
-        <div className="wizardSidebarTitle">Création d’un foyer</div>
+        <div className="wizardSidebarTitle">Création d'un foyer</div>
         <div className="wizardSteps">
           {visibleSteps.map((s, idx) => {
             const current = s.step === step;
@@ -908,15 +1024,33 @@ return (
         </div>
       </div>
 
-      <div className="card" style={{ padding: 14, display: "grid", gap: 12 }}>
-        <div key={step} className={`wizardStepAnim ${stepAnimDir === "next" ? "animNext" : "animPrev"}`}>
+      <div className="card wizardContentCard">
+        <button
+          type="button"
+          className="wizardSideArrow"
+          onClick={goPrev}
+          disabled={!prevVisibleStep && step !== "people"}
+          aria-label="Étape précédente"
+        >
+          ‹
+        </button>
+
+        <div
+          className="wizardViewport"
+          onTouchStart={onWizardTouchStart}
+          onTouchEnd={onWizardTouchEnd}
+        >
+          <div
+            key={step}
+            className={`wizardStepAnim ${stepAnimDir === "next" ? "animNext" : "animPrev"}`}
+          >
 
 
       {step === "coupleStatus" ? (
         <div className="wizardPanel" style={{ display: "grid", gap: 12 }}>
           <div style={{ fontWeight: 900 }}>
             {draftPeople?.[0]?.name?.trim() || "Personne 1"} et {draftPeople?.[1]?.name?.trim() || "Personne 2"} êtes :
-          </div>
+      </div>
 
           <div style={{ display: "grid", gap: 12 }}>
             {([
@@ -2571,9 +2705,21 @@ return (
           <button className="btnSecondary" onClick={() => router.push("/")}>Retour à l’accueil</button>
         </div>
       ) : null}
+          </div>
         </div>
+
+        <button
+          type="button"
+          className="wizardSideArrow"
+          onClick={goNext}
+          disabled={!nextVisibleStep || !canGoNext}
+          aria-label="Étape suivante"
+        >
+          ›
+        </button>
       </div>
     </div>
+
   </div>
     </>
   );

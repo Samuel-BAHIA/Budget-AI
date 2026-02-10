@@ -10,7 +10,7 @@ type Crumb = { href: string; label: string };
 
 const LABELS: Record<string, string> = {
   foyers: "Foyers",
-  onboarding: "Création",
+  onboarding: "Création d'un foyer",
   utilisateurs: "Gestion",
   depenses: "Dépenses",
   revenus: "Revenus",
