@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import BottomNav from "@/components/nav/BottomNav";
 import Breadcrumbs, { useBreadcrumbCrumbs } from "@/components/ui/Breadcrumbs";
 import DashboardViewSelector from "@/components/nav/DashboardViewSelector";
-import AuthMenu from "@/components/auth/AuthMenu";
 import SidebarDrawer from "@/components/nav/SidebarDrawer";
 // Sidebar removed in web mode; keep layout simple.
 
@@ -104,9 +103,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="appShell">
-      <SidebarDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)}>
-        <AuthMenu />
-      </SidebarDrawer>
+      <SidebarDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <header className="topbar">
         <div className="topbarInner topbarInnerSingleMenu">
           <button
