@@ -1115,7 +1115,7 @@ return (
       <div className="card wizardContentCard">
         <button
           type="button"
-          className="wizardSideArrow"
+          className="wizardSideArrow wizardSideArrowLeft"
           onClick={goPrev}
           disabled={!prevVisibleStep && step !== "people"}
           aria-label="Étape précédente"
@@ -2674,7 +2674,7 @@ return (
 
         <button
           type="button"
-          className="wizardSideArrow"
+          className="wizardSideArrow wizardSideArrowRight"
           onClick={goNext}
           disabled={!nextVisibleStep || !canGoNext}
           aria-label="Étape suivante"

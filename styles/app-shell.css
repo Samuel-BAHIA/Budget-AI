@@ -4508,10 +4508,9 @@ html, body {
 
 /* Wizard content card now owns the scrolling (between topbar and breadcrumbs). */
 .wizardContentCard{
-  padding: 8px;
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
+  padding: 10px;
+  position: relative;
+  display: block;
   border-radius: 18px;
 }
 
@@ -4526,11 +4525,11 @@ html, body {
 }
 
 .wizardViewport{
-  flex: 1;
+  width: 100%;
   min-width: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 14px;
+  padding: 14px 56px;
   border-radius: 14px;
   background: rgba(0,0,0,.02);
 }
@@ -4541,30 +4540,41 @@ html, body {
 }
 
 .wizardSideArrow{
-  width: 44px;
-  min-width: 44px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.10);
-  background: rgba(255,255,255,.85);
-  font-size: 26px;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  font-size: 34px;
   font-weight: 900;
+  color: rgba(0,0,0,.45);
   cursor: pointer;
   display: grid;
   place-items: center;
   user-select: none;
-  box-shadow: 0 6px 16px rgba(0,0,0,.08);
-  transition: transform 120ms ease, opacity 120ms ease;
-}
-
-.wizardSideArrow:active{
-  transform: scale(.98);
-}
-
-.wizardSideArrow{
-  box-shadow: 0 10px 22px rgba(0,0,0,.10);
+  box-shadow: none;
   transition: transform 160ms ease, opacity 160ms ease;
 }
-.wizardSideArrow:active{ transform: scale(.96); }
+
+/* Mobile: make the floating arrows a bit wider (easier to hit),
+   while keeping them visually light (no container / background). */
+@media (max-width: 820px){
+  .wizardSideArrow{
+    width: 68px;
+    height: 56px;
+    font-size: 32px;
+    font-weight: 800;
+    opacity: .92;
+  }
+}
+
+.wizardSideArrow:active{ transform: translateY(-50%) scale(.96); }
+
+.wizardSideArrowLeft{ left: 8px; }
+.wizardSideArrowRight{ right: 8px; }
 
 .wizardSideArrow:disabled{
   opacity: .35;
@@ -4596,12 +4606,16 @@ html, body {
 /* Wizard mobile: let the current step card fill the viewport above the fixed breadcrumb bar,
    and center short content vertically (without breaking scroll for long steps). */
 @media (max-width: 820px){
-  /* Remove bottom padding so the content card can sit flush above the breadcrumb bar */
-  .wizardWrap{ padding: 10px 10px 0 10px; }
+  /* Full-bleed wizard on mobile: no outer margins. */
+  .wizardWrap{ padding: 0; }
 
   .wizardContentCard{
     /* 132px matches the breadcrumb bar footprint (panel + safe area) */
-    height: calc(100dvh - var(--topbar-h) - var(--bottomnav-h) - 132px - 10px);
+    height: calc(100dvh - var(--topbar-h) - var(--bottomnav-h) - 132px);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
   }
   .wizardStepAnim{
     min-height: 100%;
@@ -4613,11 +4627,20 @@ html, body {
   /* Center the step content while keeping it fluid */
   .wizardPanel{
     width: 100%;
-    max-width: 520px;
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
+  }
+
+  /* Keep content away from floating arrows, but avoid the big "margins" feel. */
+  .wizardViewport{
+    padding: 14px 16px;
+    border-radius: 0;
   }
 }
-@media (min-width: 821px){
+/* Keep the fixed breadcrumb bar visible a bit longer.
+   In Chrome "Toggle device toolbar" the viewport can exceed 821px while still
+   representing a mobile layout. */
+@media (min-width: 1025px){
   .wizardCrumbBar{ display:none; }
 }
 
