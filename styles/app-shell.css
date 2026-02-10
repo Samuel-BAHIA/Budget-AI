@@ -4362,6 +4362,29 @@ html, body {
   gap: 0;
 }
 
+/* Subtle edge fade so the centered step stands out */
+.wizardCrumbPanel{
+  position: relative;
+}
+.wizardCrumbPanel::before,
+.wizardCrumbPanel::after{
+  content: "";
+  position: absolute;
+  top: 46px; /* below title row */
+  bottom: 10px;
+  width: 22px;
+  pointer-events: none;
+  z-index: 1;
+}
+.wizardCrumbPanel::before{
+  left: 10px;
+  background: linear-gradient(to right, rgba(255,255,255,.92), rgba(255,255,255,0));
+}
+.wizardCrumbPanel::after{
+  right: 10px;
+  background: linear-gradient(to left, rgba(255,255,255,.92), rgba(255,255,255,0));
+}
+
 .wizardCrumbTop{
   display: grid;
   grid-template-columns: 44px 1fr 44px;
@@ -4430,13 +4453,47 @@ html, body {
   transition: transform 220ms ease, opacity 220ms ease, color 220ms ease;
   transform-origin: center;
 }
-.wizardCrumbItem.dist0{ transform: scale(1.20); opacity: 1; }
-.wizardCrumbItem.dist1{ transform: scale(1.05); opacity: .95; }
-.wizardCrumbItem.dist2{ transform: scale(.95); opacity: .85; }
-.wizardCrumbItem.dist3{ transform: scale(.88); opacity: .75; }
+
+.wizardCrumbMini{
+  font-size: 11px;
+  font-weight: 800;
+  opacity: .55;
+  margin-left: 2px;
+}
+.wizardCrumbItem.dist0{ transform: scale(1.40); opacity: 1; }
+.wizardCrumbItem.dist1{ transform: scale(1.08); opacity: .90; }
+.wizardCrumbItem.dist2{ transform: scale(.94); opacity: .70; }
+.wizardCrumbItem.dist3{ transform: scale(.86); opacity: .55; }
 .wizardCrumbItem.active{
   color: rgba(0,0,0,.9);
   font-weight: 800;
+}
+
+/* Small dot indicator under the active main step */
+.wizardCrumbItem.active .wizardCrumbTxt{
+  position: relative;
+}
+.wizardCrumbItem.active .wizardCrumbTxt::after{
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.55);
+}
+.wizardCrumbItem.active .wizardCrumbTxt::after{
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -8px;
+  width: 8px;
+  height: 4px;
+  border-radius: 6px;
+  background: rgba(0,0,0,.35);
 }
 .wizardCrumbSep{
   margin-left: 8px;
@@ -4455,6 +4512,17 @@ html, body {
   display: flex;
   gap: 10px;
   align-items: stretch;
+  border-radius: 18px;
+}
+
+/* Give the wizard a clearer "app" feel on mobile */
+.wizardContentCard{
+  border-radius: 18px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 14px 34px rgba(0,0,0,.12);
 }
 
 .wizardViewport{
@@ -4463,6 +4531,13 @@ html, body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 14px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.02);
+}
+
+.wizardViewport{
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,0));
 }
 
 .wizardSideArrow{
@@ -4477,11 +4552,42 @@ html, body {
   display: grid;
   place-items: center;
   user-select: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,.08);
+  transition: transform 120ms ease, opacity 120ms ease;
 }
+
+.wizardSideArrow:active{
+  transform: scale(.98);
+}
+
+.wizardSideArrow{
+  box-shadow: 0 10px 22px rgba(0,0,0,.10);
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.wizardSideArrow:active{ transform: scale(.96); }
 
 .wizardSideArrow:disabled{
   opacity: .35;
   cursor: default;
+}
+
+/* Step transition (used when navigating with arrows/swipe) */
+.wizardStepAnim{
+  will-change: transform, opacity;
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(.2,.8,.2,1);
+  animation-fill-mode: both;
+}
+.wizardStepAnim.animNext{ animation-name: wizSlideInRight; }
+.wizardStepAnim.animPrev{ animation-name: wizSlideInLeft; }
+
+@keyframes wizSlideInRight{
+  from{ transform: translateX(18px); opacity: .0; }
+  to{ transform: translateX(0); opacity: 1; }
+}
+@keyframes wizSlideInLeft{
+  from{ transform: translateX(-18px); opacity: .0; }
+  to{ transform: translateX(0); opacity: 1; }
 }
 
 /* Old in-panel next/back row is no longer used (navigation is via arrows + swipe). */
@@ -4503,8 +4609,13 @@ html, body {
     flex-direction: column;
     justify-content: center;
   }
-  /* Keep panels full width when centered */
-  .wizardPanel{ width: 100%; }
+
+  /* Center the step content while keeping it fluid */
+  .wizardPanel{
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+  }
 }
 @media (min-width: 821px){
   .wizardCrumbBar{ display:none; }

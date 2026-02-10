@@ -452,9 +452,18 @@ function BudgetSection(props: {
  *  - onGo        : navigation callback
  * OUTPUT: a fixed breadcrumb bar (mobile only via CSS)
  */
+type WizardMainStep = {
+  key: string;
+  label: string;
+  /** Navigate to this underlying step when the user taps the main step */
+  goToStep: Step;
+  /** Optional sub-progress inside the main step, e.g. "2/4" */
+  subProgress?: string;
+};
+
 function MobileWizardBreadcrumbPortal(props: {
-  visibleSteps: Array<{ step: Step; label: string }>;
-  currentStep: Step;
+  mainSteps: WizardMainStep[];
+  activeKey: string;
   onGo: (s: Step) => void;
   enabled: boolean;
 }) {
@@ -467,37 +476,37 @@ function MobileWizardBreadcrumbPortal(props: {
   useEffect(() => {
     const btn = activeRef.current;
     if (!btn) return;
-    // Center the active step in the scroll area.
+    // Center the active crumb in the scroll area.
     btn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-  }, [props.currentStep]);
+  }, [props.activeKey]);
 
   const bar = (
     <div className="wizardCrumbBar" role="navigation" aria-label="Étapes">
       <div className="wizardCrumbPanel">
-        <div ref={innerRef} className="wizardCrumbInner" aria-label="Fil d’étapes">
+        <div ref={innerRef} className="wizardCrumbInner" aria-label="Étapes principales">
           {/*
             NOTE: Navigation arrows are now displayed on the wizard page itself
             (left/right of the content). The breadcrumb bar stays focused on
             the "carousel" effect only.
           */}
           {(() => {
-            const currentIdx = Math.max(0, props.visibleSteps.findIndex((s) => s.step === props.currentStep));
-            return props.visibleSteps.map((s, idx) => {
-              const isActive = s.step === props.currentStep;
+            const currentIdx = Math.max(0, props.mainSteps.findIndex((s) => s.key === props.activeKey));
+            return props.mainSteps.map((s, idx) => {
+              const isActive = s.key === props.activeKey;
               const dist = idx - currentIdx;
               const distClass = `dist${Math.min(3, Math.abs(dist))}`;
               return (
                 <button
-                  key={s.step}
+                  key={s.key}
                   ref={isActive ? (el) => {
                     activeRef.current = el;
                   } : undefined}
                   className={"wizardCrumbItem " + distClass + (isActive ? " active" : "")}
-                  onClick={() => props.onGo(s.step)}
+                  onClick={() => props.onGo(s.goToStep)}
                   type="button"
                 >
-                  <span className="wizardCrumbNum">{idx + 1}</span>
                   <span className="wizardCrumbTxt">{s.label}</span>
+                  {s.subProgress ? <span className="wizardCrumbMini">{s.subProgress}</span> : null}
                   <span className="wizardCrumbSep">›</span>
                 </button>
               );
@@ -894,13 +903,75 @@ export default function OnboardingWizard() {
     const showCars = hasCar === true;
 
     return WIZ_STEPS.filter((s) => {
+      // Hide couple step when the foyer is a single-person household.
+      if (s.step === "coupleStatus") {
+        const isSingle = householdType === "single" || (draftPeople?.filter((p) => (p?.name ?? "").trim().length > 0).length ?? 0) < 2;
+        return !isSingle;
+      }
       if (s.step === "rentals") return showRentals;
       if (s.step === "owners") return showOwners;
       if (s.step === "cars") return showCars;
       // Keep everything else always visible (people, coupleStatus, incomes, situation, daily, summary)
       return true;
     });
-  }, [isTenant, isOwner, hasCar]);
+  }, [isTenant, isOwner, hasCar, householdType, draftPeople]);
+
+  // ---------------------------------------------------------------------
+  // Main steps (mobile breadcrumbs)
+  // Goal: show 5–7 stable steps even when the underlying flow has
+  // sub-steps (and can branch based on the user).
+  // We keep ALL existing step logic; this is purely a UI grouping.
+  // ---------------------------------------------------------------------
+  const mainSteps = useMemo<WizardMainStep[]>(() => {
+    const has = (s: Step) => visibleSteps.some((x) => x.step === s);
+
+    // Define groups by underlying steps (in order).
+    // NOTE: If a step is not visible, it is simply ignored.
+    const groups: Array<{ key: string; label: string; steps: Step[] }> = [
+      { key: "people", label: "Membres", steps: ["people"] },
+      { key: "couple", label: "Couple", steps: ["coupleStatus"] },
+      { key: "incomes", label: "Revenus", steps: ["incomes"] },
+      { key: "housing", label: "Logement", steps: ["situation", "rentals", "owners"] },
+      { key: "mobility", label: "Mobilité", steps: ["cars"] },
+      { key: "daily", label: "Quotidien", steps: ["daily"] },
+      { key: "summary", label: "Résumé", steps: ["summary"] },
+    ];
+
+    return groups
+      .map((g) => {
+        const steps = g.steps.filter((s) => has(s));
+        if (steps.length === 0) return null;
+        return {
+          key: g.key,
+          label: g.label,
+          goToStep: steps[0],
+          // Sub progress is only relevant when a main step contains multiple visible steps.
+          subProgress:
+            steps.length > 1
+              ? (() => {
+                  const idx = Math.max(0, steps.indexOf(step));
+                  // If the current step is not inside the group, don't show progress for it.
+                  if (idx === 0 && step !== steps[0]) return undefined;
+                  return `${Math.max(1, idx + 1)}/${steps.length}`;
+                })()
+              : undefined,
+        } as WizardMainStep;
+      })
+      .filter(Boolean) as WizardMainStep[];
+  }, [visibleSteps, step]);
+
+  const activeMainKey = useMemo(() => {
+    const groupFor = (s: Step) => {
+      if (s === "people") return "people";
+      if (s === "coupleStatus") return "couple";
+      if (s === "incomes") return "incomes";
+      if (s === "situation" || s === "rentals" || s === "owners") return "housing";
+      if (s === "cars") return "mobility";
+      if (s === "daily") return "daily";
+      return "summary";
+    };
+    return groupFor(step);
+  }, [step]);
 
   // Swipe navigation (mobile): allow sliding between wizard steps.
   const currentVisibleIdx = useMemo(
@@ -986,6 +1057,18 @@ export default function OnboardingWizard() {
       return;
     }
 
+    // Special case: "Situation" controls branching (rentals/owners/cars).
+    // Keep the old behavior where we proactively mark skipped sections.
+    if (step === "situation") {
+      markCompleted("situation");
+      if (!isTenant) markSkipped("rentals");
+      if (!isOwner) markSkipped("owners");
+      if (!hasCar) markSkipped("cars");
+      persistProfile();
+      if (nextVisibleStep) setStep(nextVisibleStep);
+      return;
+    }
+
     // Default: mark completed + persist, then move to next visible step.
     // (Some steps also auto-advance via selection buttons, which still works.)
     markCompleted(step);
@@ -996,7 +1079,12 @@ export default function OnboardingWizard() {
 return (
     <>
       {mounted && (
-        <MobileWizardBreadcrumbPortal visibleSteps={visibleSteps} currentStep={step} onGo={(s) => setStep(s)} enabled={true} />
+        <MobileWizardBreadcrumbPortal
+          mainSteps={mainSteps}
+          activeKey={activeMainKey}
+          onGo={(s) => setStep(s)}
+          enabled={true}
+        />
       )}
       <div className="wizardWrap">
       <div className="wizardLayout">
@@ -1077,18 +1165,7 @@ return (
             ))}
           </div>
 
-          <div className="wizardNav" style={{ marginTop: 6 }}>
-            <button
-              className="btnSecondary"
-              style={{ width: 140 }}
-              onClick={() => {
-                setStep("people");
-              }}
-            >
-              {"< Retour"}
-            </button>
-            <div />
-          </div>
+          {/* Navigation is handled via side arrows + swipe. */}
         </div>
       ) : null}
 
@@ -1213,41 +1290,7 @@ return (
             </div>
           )}
 
-          <div className="wizardNav">
-            <button
-              className="btnSecondary"
-              style={{ width: 140 }}
-              onClick={() => router.push("/" )}
-            >
-              Annuler
-            </button>
-            <button
-              className="btnPrimary"
-              style={{ width: 140 }}
-              disabled={!canContinuePeople}
-              onClick={() => {
-                markCompleted("people");
-
-                const needed = Math.min(2, draftPeople.length || 1);
-                const type = needed === 2 ? "couple" : "single";
-                setHouseholdType(type);
-
-                if (type === "single") {
-                  markSkipped("coupleStatus");
-                  setCoupleStatus(undefined);
-                }
-
-                const foyer = createFoyerWithPeople(draftPeople.slice(0, needed));
-                setActiveFoyer(foyer);
-                setFoyerId(foyer);
-                writeFoyerProfile({ foyerId: foyer, householdType: type, coupleStatus });
-
-                setStep(type === "couple" ? "coupleStatus" : "incomes");
-              }}
-            >
-              Suivant ›
-            </button>
-          </div>
+          {/* Navigation is handled via side arrows + swipe (mobile). */}
         </div>
       ) : null}
 
@@ -1308,20 +1351,7 @@ return (
             </div>
           </div>
 
-          <div className="wizardNav">
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => setStep("people")}>{"< Retour"}</button>
-            <button
-              className="btnPrimary"
-              style={{ width: 140 }}
-              onClick={() => {
-                markCompleted("incomes");
-                persistProfile();
-                setStep("situation");
-              }}
-            >
-              Suivant ›
-            </button>
-          </div>
+          {/* Navigation is handled via side arrows + swipe (mobile). */}
         </div>
       ) : null}
 
@@ -1361,30 +1391,7 @@ return (
             </label>
           </div>
 
-          <div className="wizardNav">
-            <button className="btnSecondary" onClick={() => setStep("incomes")}>
-              &lt; Retour
-            </button>
-            <button
-              className="btnPrimary"
-              onClick={() => {
-                // Mark completion for the menu itself
-                markCompleted("situation");
-
-                // Skip downstream steps depending on choices
-                if (!isTenant) markSkipped("rentals");
-                if (!isOwner) markSkipped("owners");
-                if (!hasCar) markSkipped("cars");
-
-                if (isTenant) return setStep("rentals");
-                if (isOwner) return setStep("owners");
-                if (hasCar) return setStep("cars");
-                return setStep("daily");
-              }}
-            >
-              Continuer ›
-            </button>
-          </div>
+          {/* Navigation is handled via side arrows + swipe (mobile). */}
         </div>
       ) : step === "rentals" ? (
         <div style={{ padding: 14, display: "grid", gap: 12 }}>
@@ -1751,22 +1758,7 @@ return (
             </div>
           ) : null}
 
-          <div className="wizardNav">
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => setStep("situation")}>
-              {"< Retour"}
-            </button>
-            <button
-              className="btnPrimary"
-              style={{ width: 140 }}
-              onClick={() => {
-                markCompleted("rentals");
-                persistProfile();
-                setStep("owners");
-              }}
-            >
-              Suivant &gt;
-            </button>
-          </div>
+          {/* Navigation is handled via side arrows + swipe (mobile). */}
         </div>
       ) : null}
 
@@ -2275,22 +2267,7 @@ return (
             </div>
           ) : null}
 
-          <div className="wizardNav">
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => setStep("owners")}>
-              {"< Retour"}
-            </button>
-            <button
-              className="btnPrimary"
-              style={{ width: 140 }}
-              onClick={() => {
-                markCompleted("owners");
-                persistProfile();
-                setStep("cars");
-              }}
-            >
-              Suivant ›
-            </button>
-          </div>
+          {/* Navigation is handled via side arrows + swipe (mobile). */}
         </div>
       ) : null}
 
@@ -2631,20 +2608,7 @@ return (
             </label>
           ))}
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => setStep(isOwner ? "owners" : "owner")}>{"< Retour"}</button>
-            <button
-              className="btnPrimary"
-              style={{ width: 140 }}
-              onClick={() => {
-                markCompleted("daily");
-                persistProfile();
-                setStep("summary");
-              }}
-            >
-              Suivant ›
-            </button>
-          </div>
+          {/* Navigation is handled via side arrows + swipe (mobile). */}
         </div>
       ) : null}
 
