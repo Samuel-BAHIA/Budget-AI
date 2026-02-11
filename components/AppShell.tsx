@@ -126,11 +126,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="main">
+      <main className={`main${pathname?.startsWith("/onboarding") ? " onboardingMain" : ""}`}>
         {/* Breadcrumbs shown on desktop for every page */}
-        <div className="breadcrumbsDesktopOnly">
-          <Breadcrumbs />
-        </div>
+        {!pathname?.startsWith("/onboarding") && (
+          <div className="breadcrumbsDesktopOnly">
+            <Breadcrumbs />
+          </div>
+        )}
         <div
           key={pathname ?? "__root"}
           className={`pageTransition pageTransition-${navDir} ${pathname?.startsWith("/dashboard") ? "pageTransition-noAnim" : ""}`}

@@ -4,21 +4,26 @@
 html, body {
   margin: 0;
   padding: 0;
+  /* Prevent tiny horizontal overflows when using 100vw full-bleed sections */
+  overflow-x: hidden;
 }
 
 
 
 :root{
-/* Defaults so fixed-height layouts work in desktop + device toolbar modes */
+  /* Defaults so fixed-height layouts work in desktop + device toolbar modes */
   --topbar-h: 64px;
-  --bottomnav-h: 0px;
---topbar-h: 64px;
-    --bottomnav-h: 72px;
-/* Approx height of the fixed breadcrumb bar (panel + padding + safe-area). */
-    --wizard-crumb-h: 112px;
---kv-left-slot: 44px;
+  --bottomnav-h: 72px;
+
+  /* Wizard breadcrumb bar sizing.
+     We explicitly set a height on the fixed breadcrumb bar so the wizard
+     content can subtract it reliably (no more "mystery gap").
+     Safe-area is added separately via --wizard-crumb-total-h. */
+  --wizard-crumb-h: 112px;
+  --wizard-crumb-total-h: calc(var(--wizard-crumb-h) + env(safe-area-inset-bottom));
+
+  --kv-left-slot: 44px;
   --kv-right-col: 170px;
---bottomnav-h: 0px;
 }
 
 
@@ -532,6 +537,13 @@ html, body {
 .main {
   padding: 16px;
   padding-bottom: 88px; /* place for bottom nav on mobile */
+}
+
+/* Onboarding is a full-screen flow.
+   It must not inherit the global .main padding / max-width constraints. */
+.onboardingMain {
+  padding: 0 !important;
+  padding-bottom: 0 !important;
 }
 
 .breadcrumbsDesktopOnly {
@@ -1845,6 +1857,8 @@ html, body {
   min-height: calc(100dvh - var(--topbar-h));
   height: calc(100dvh - var(--topbar-h));
   box-sizing: border-box;
+  width: 100%;
+  margin: 0;
 }
 
 .wizardLayout {
@@ -1869,16 +1883,14 @@ html, body {
 @media (max-width: 1024px) {
   
 
-  /* Break out of any parent padding (e.g., .main on desktop) */
   .wizardWrap{
     padding: 0 !important;
-    width: 100vw;
-    margin-left: calc(50% - 50vw);
-    margin-right: calc(50% - 50vw);
+    width: 100%;
+    margin: 0;
     align-items: stretch;
     justify-content: flex-start;
-    min-height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-h));
-    height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-h));
+    min-height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-total-h));
+    height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-total-h));
   }
 
   .wizardLayout{
@@ -1895,7 +1907,7 @@ html, body {
   }
 
   .wizardContentCard{
-    height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-h));
+    height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-total-h));
     border-radius: 0;
     border-left: none;
     border-right: none;
@@ -3984,20 +3996,28 @@ html, body {
   left: 0;
   right: 0;
   z-index: 3000;
-  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  height: var(--wizard-crumb-total-h);
+  box-sizing: border-box;
+  /* IMPORTANT: keep the bar itself padding-free so the panel can truly
+     cover the whole bar (no "halo" area that makes debugging confusing). */
+  padding: 0;
   pointer-events: none;
 }
 .wizardCrumbPanel{
   pointer-events: auto;
+  /* The panel is the visual bar; it covers the whole crumb area. */
+  width: 100%;
+  height: 100%;
   border: 1px solid rgba(0,0,0,.08);
   background: rgba(255,255,255,.92);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
   box-shadow: 0 10px 28px rgba(0,0,0,.12);
-  padding: 10px 12px;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   display: grid;
   gap: 0;
+  overflow: hidden; /* prevents accidental vertical scroll/pan */
 }
 
 /* Subtle edge fade so the centered step stands out */
@@ -4069,6 +4089,8 @@ html, body {
   gap: 10px;
   align-items:center;
   overflow-x: auto;
+  overflow-y: hidden; /* DEBUG_WIZARD: prevent vertical panning when items scale */
+  touch-action: pan-x; /* DEBUG_WIZARD: horizontal swipe only */
   scrollbar-width: none;
   /* Keep text away from the edge-fade overlays so the first/last letters
      never look clipped when the scroll position is near the ends. */
@@ -4196,11 +4218,10 @@ html, body {
    - Remove safely by deleting this whole block.
    ======================================================================== */
 
-/* DEBUG_WIZARD: overall fixed breadcrumb zone */
+/* DEBUG_WIZARD: breadcrumbs container
+   The bar (pale) should be fully covered by the panel (stronger). */
 .wizardCrumbBar{ background: rgba(255, 215, 0, .10); }
-
-/* DEBUG_WIZARD: breadcrumb panel itself */
-.wizardCrumbPanel{ background: rgba(255, 215, 0, .22); }
+.wizardCrumbPanel{ background: rgba(255, 215, 0, .28); }
 
 /* DEBUG_WIZARD: outer content card (the full-bleed card between topbar & crumbs) */
 .wizardContentCard{ background: rgba(255, 0, 0, .08) !important; }
@@ -4210,6 +4231,61 @@ html, body {
 
 /* DEBUG_WIZARD: the animated step wrapper (helps spot unintended margins) */
 .wizardStepAnim{ outline: 2px dashed rgba(120, 0, 255, .35); }
+
+/* ========================================================================
+   DEBUG_WIZARD_LABELS
+   Purpose:
+   - Print container identifiers directly on-screen to diagnose layout issues.
+   Notes:
+   - Mobile-only (your rendering bugs are on mobile).
+   - Remove safely by deleting this whole block.
+   ======================================================================== */
+
+@media (max-width: 820px){
+  /* Ensure the label anchor works (no impact outside debug). */
+  .wizardWrap,
+  .wizardContentCard,
+  .wizardViewport,
+  .wizardCrumbBar,
+  .wizardCrumbPanel,
+  .wizardStepAnim{
+    position: relative;
+  }
+
+  .wizardWrap::after{
+    content: "DEBUG_WIZARD 1 · wizardWrap";
+  }
+  .wizardContentCard::after{
+    content: "DEBUG_WIZARD 2 · wizardContentCard";
+  }
+  .wizardViewport::after{
+    content: "DEBUG_WIZARD 3 · wizardViewport";
+  }
+  .wizardStepAnim::after{
+    content: "DEBUG_WIZARD 4 · wizardStepAnim";
+  }
+  .wizardCrumbPanel::after{
+    content: "DEBUG_WIZARD 5 · wizardCrumbPanel";
+  }
+
+  .wizardWrap::after,
+  .wizardContentCard::after,
+  .wizardViewport::after,
+  .wizardStepAnim::after,
+  .wizardCrumbPanel::after{
+    position: absolute;
+    left: 8px;
+    bottom: 6px;
+    z-index: 9999;
+    pointer-events: none;
+    font: 700 11px/1.1 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    letter-spacing: .2px;
+    color: rgba(255,255,255,.92);
+    background: rgba(0,0,0,.55);
+    padding: 3px 6px;
+    border-radius: 8px;
+  }
+}
 
 .wizardSideArrow{
   position: absolute;
