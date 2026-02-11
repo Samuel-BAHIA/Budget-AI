@@ -6,19 +6,28 @@ html, body {
   padding: 0;
 }
 
+/* Predictable sizing everywhere */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* The app scrolls inside the content area, not the whole page */
+body {
+  overflow: hidden;
+}
 
 
-:root{
-/* Defaults so fixed-height layouts work in desktop + device toolbar modes */
+
+:root {
+  /* Fixed bars heights (used to size the scroll container) */
   --topbar-h: 64px;
-  --bottomnav-h: 0px;
---topbar-h: 64px;
-    --bottomnav-h: 72px;
-/* Approx height of the fixed breadcrumb bar (panel + padding + safe-area). */
-    --wizard-crumb-h: 112px;
---kv-left-slot: 44px;
+  --bottomnav-h: 72px;
+
+  /* Approx height of the fixed breadcrumb bar (panel + padding + safe-area). */
+  --wizard-crumb-h: 112px;
+
+  --kv-left-slot: 44px;
   --kv-right-col: 170px;
---bottomnav-h: 0px;
 }
 
 
@@ -26,10 +35,10 @@ html, body {
 
 
 .appShell {
-  min-height: 100dvh;
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: auto 1fr auto; /* topbar, content, bottomNav */
+  position: relative;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
 }
 
 /* Mobile: keep top & bottom bars always visible, and scroll inside the content area */
@@ -38,8 +47,11 @@ html, body {
 /* Topbar mobile */
 .topbar {
   display: block;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-h);
   z-index: 10;
   /* Distinctive bar color (different from page content) */
   background: #f7f7fb;
@@ -530,8 +542,17 @@ html, body {
 
 /* Main content */
 .main {
+  position: fixed;
+  top: var(--topbar-h);
+  bottom: var(--bottomnav-h);
+  left: 0;
+  right: 0;
+  width: 100vw;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
   padding: 16px;
-  padding-bottom: 88px; /* place for bottom nav on mobile */
 }
 
 .breadcrumbsDesktopOnly {
@@ -550,12 +571,16 @@ html, body {
 
 /* Bottom nav visible on mobile */
 .bottomNav {
-  position: sticky;
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: 0;
+  height: var(--bottomnav-h);
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   /* Distinctive bar color (different from page content and from top bar) */
   background: #f3f6ff;
   padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 }
 
 
@@ -609,9 +634,12 @@ html, body {
 
 /* Desktop */
 @media (min-width: 900px) {
+  :root {
+    --bottomnav-h: 0px;
+  }
+
   .appShell {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr; /* topbar, content */
+    /* Wrapper stays fixed-height; only the content pane scrolls */
   }
 
   .topbar {
@@ -3223,6 +3251,7 @@ html, body {
 
 .pageTransition {
   will-change: transform, opacity, filter;
+  max-width: 100%;
 }
 
 .pageTransition-forward {
