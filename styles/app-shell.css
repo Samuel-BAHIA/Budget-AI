@@ -21,7 +21,8 @@ body {
 :root {
   /* Fixed bars heights (used to size the scroll container) */
   --topbar-h: 64px;
-  --bottomnav-h: 72px;
+  /* Bottom tab bar removed */
+  --bottomnav-h: 0px;
 
   /* Approx height of the fixed breadcrumb bar (panel + padding + safe-area). */
   --wizard-crumb-h: 112px;
@@ -634,10 +635,6 @@ body {
 
 /* Desktop */
 @media (min-width: 900px) {
-  :root {
-    --bottomnav-h: 0px;
-  }
-
   .appShell {
     /* Wrapper stays fixed-height; only the content pane scrolls */
   }
@@ -1870,8 +1867,10 @@ body {
   /* Occupy the viewport under the fixed topbar.
      This keeps the right content area tall enough for the internal scroll
      container to stretch on both desktop and mobile. */
-  min-height: calc(100dvh - var(--topbar-h));
-  height: calc(100dvh - var(--topbar-h));
+  /* .main already occupies the viewport between topbar and bottom nav.
+     So the wizard should just fill its parent (avoid subtracting topbar twice). */
+  min-height: 100%;
+  height: 100%;
   box-sizing: border-box;
 }
 
@@ -1905,7 +1904,8 @@ body {
     margin-right: calc(50% - 50vw);
     align-items: stretch;
     justify-content: flex-start;
-    min-height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-h));
+    min-height: 100%;
+    height: 100%;
   }
 
   .wizardLayout{
@@ -1922,7 +1922,7 @@ body {
   }
 
   .wizardContentCard{
-    height: calc(100dvh - var(--topbar-h) - var(--wizard-crumb-h));
+    height: 100%;
     border-radius: 0;
     border-left: none;
     border-right: none;
@@ -1946,7 +1946,7 @@ body {
     min-height: 100%;
     display:flex;
     flex-direction:column;
-    justify-content:center;
+    justify-content:flex-start;
   }
 }
 

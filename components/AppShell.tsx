@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import BottomNav from "@/components/nav/BottomNav";
 import Breadcrumbs, { useBreadcrumbCrumbs } from "@/components/ui/Breadcrumbs";
 import DashboardViewSelector from "@/components/nav/DashboardViewSelector";
 import SidebarDrawer from "@/components/nav/SidebarDrawer";
@@ -138,10 +137,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-
-      <nav className="bottomNav" aria-label="Navigation principale">
-        <BottomNav />
-      </nav>
     </div>
   );
 }
