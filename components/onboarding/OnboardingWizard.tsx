@@ -175,8 +175,9 @@ function Section(props: { title: string; children: any }) {
   );
 }
 
-function WizardTopProgress(props: { current: number; total: number; label?: string }) {
+function WizardTopProgress(props: { current: number; total: number; label?: string; chip?: string; onQuit?: () => void }) {
   const pct = props.total <= 0 ? 0 : Math.round((props.current / props.total) * 100);
+
   return (
     <div className="wizTopProgress" aria-label="Progression">
       <div className="wizTopProgressRow">
@@ -185,12 +186,72 @@ function WizardTopProgress(props: { current: number; total: number; label?: stri
           {props.label ? <span className="wizTopProgressSep">·</span> : null}
           {props.label ? <span className="wizTopProgressTxt">{props.label}</span> : null}
         </div>
-        <div className="wizTopProgressPct" aria-hidden="true">
-          {pct}%
+
+        <div className="wizTopProgressRight">
+          {props.chip ? <span className="wizResumeChip">{props.chip}</span> : null}
+          {props.onQuit ? (
+            <button
+              type="button"
+              className="wizQuitBtn"
+              onClick={props.onQuit}
+              aria-label="Quitter l’assistant"
+            >
+              <span className="wizQuitIcon" aria-hidden="true">×</span>
+              <span className="wizQuitTxt">Quitter</span>
+            </button>
+          ) : null}
+          <div className="wizTopProgressPct" aria-hidden="true">
+            {pct}%
+          </div>
         </div>
       </div>
-      <div className="wizTopProgressBar" role="progressbar" aria-valuenow={props.current} aria-valuemin={1} aria-valuemax={props.total}>
+
+      <div
+        className="wizTopProgressBar"
+        role="progressbar"
+        aria-valuenow={props.current}
+        aria-valuemin={1}
+        aria-valuemax={props.total}
+      >
         <div className="wizTopProgressFill" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ConfirmModal — tiny, dependency-free confirmation dialog (used for "Quitter").
+ */
+function ConfirmModal(props: {
+  open: boolean;
+  title: string;
+  description?: string;
+  confirmText?: string;
+  cancelText?: string;
+  danger?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!props.open) return null;
+
+  return (
+    <div className="wizModalOverlay" role="dialog" aria-modal="true" aria-label={props.title}>
+      <div className="wizModalCard">
+        <div className="wizModalTitle">{props.title}</div>
+        {props.description ? <div className="wizModalDesc">{props.description}</div> : null}
+
+        <div className="wizModalActions">
+          <button type="button" className="btnSecondary wizModalBtn" onClick={props.onCancel}>
+            {props.cancelText ?? "Annuler"}
+          </button>
+          <button
+            type="button"
+            className={props.danger ? "btnPrimary wizModalBtn wizDanger" : "btnPrimary wizModalBtn"}
+            onClick={props.onConfirm}
+          >
+            {props.confirmText ?? "Confirmer"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -217,6 +278,38 @@ function ChoiceCard(props: {
       </div>
       <div className="wizChoiceCheck" aria-hidden="true">{props.selected ? "✓" : ""}</div>
     </button>
+  );
+}
+
+function YesNoStack(props: {
+  value?: boolean | null;
+  onYes: () => void;
+  onNo: () => void;
+  yesTitle?: string;
+  yesSubtitle?: string;
+  noTitle?: string;
+  noSubtitle?: string;
+}) {
+  return (
+    <div className="wizYesNo">
+      <button type="button" className={`wizYesNoBtn ${props.value === true ? "isActive" : ""}`} onClick={props.onYes}>
+        <span className="wizYNIcon" aria-hidden="true">✓</span>
+        <span className="min0" style={{ textAlign: "left" }}>
+          <span className="wizYNTitle">{props.yesTitle ?? "Oui"}</span>
+          {props.yesSubtitle ? <span className="wizYNSub">{props.yesSubtitle}</span> : null}
+        </span>
+        <span className="wizYNArrow" aria-hidden="true">›</span>
+      </button>
+
+      <button type="button" className={`wizYesNoBtn ${props.value === false ? "isActive" : ""}`} onClick={props.onNo}>
+        <span className="wizYNIcon isNo" aria-hidden="true">×</span>
+        <span className="min0" style={{ textAlign: "left" }}>
+          <span className="wizYNTitle">{props.noTitle ?? "Non"}</span>
+          {props.noSubtitle ? <span className="wizYNSub">{props.noSubtitle}</span> : null}
+        </span>
+        <span className="wizYNArrow" aria-hidden="true">›</span>
+      </button>
+    </div>
   );
 }
 
@@ -346,23 +439,12 @@ function CurrencyField(props: {
 
 function YesNoToggle(props: { value: boolean | undefined; onChange: (v: boolean) => void }) {
   return (
-    <div className="wizYesNo" role="group" aria-label="Choix Oui / Non">
-      <button
-        type="button"
-        className={`wizYesNoBtn ${props.value === true ? "isActive" : ""}`}
-        onClick={() => props.onChange(true)}
-        aria-pressed={props.value === true}
-      >
-        Oui
-      </button>
-      <button
-        type="button"
-        className={`wizYesNoBtn ${props.value === false ? "isActive" : ""}`}
-        onClick={() => props.onChange(false)}
-        aria-pressed={props.value === false}
-      >
-        Non
-      </button>
+    <div role="group" aria-label="Choix Oui / Non">
+      <YesNoStack
+        value={props.value}
+        onYes={() => props.onChange(true)}
+        onNo={() => props.onChange(false)}
+      />
     </div>
   );
 }
@@ -769,6 +851,8 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
   const [completedSteps, setCompletedSteps] = useState<Step[]>([]);
   const [skippedSteps, setSkippedSteps] = useState<Step[]>([]);
 
+  const [quitOpen, setQuitOpen] = useState(false);
+
   const markCompleted = (s: Step) =>
     setCompletedSteps((prev) => (prev.includes(s) ? prev : [...prev, s]));
   const markSkipped = (s: Step) =>
@@ -1132,6 +1216,72 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
   });
 }, [householdType, isOwner]);
 
+
+  const resumeChip = useMemo(() => {
+    // Small "at-a-glance" budget chip for the top bar (kept intentionally short).
+    const incomeMonthly = (incomes ?? []).reduce((s, it) => s + (Number(it.amount) || 0), 0);
+
+    const sumCustomLines = (lines: any[] | undefined) =>
+      (lines ?? []).reduce((s, l) => s + toMonthly(Number(l?.amount ?? 0), (l?.period as any) ?? "month"), 0);
+
+    const rentalsMonthly = (rentals ?? []).reduce((s, r) => {
+      const base =
+        (Number(r?.loyer) || 0) +
+        (Number(r?.charges) || 0) +
+        (Number(r?.eau) || 0) +
+        (Number(r?.elec) || 0) +
+        (Number(r?.gaz) || 0) +
+        (Number(r?.internet) || 0) +
+        (Number(r?.assurance) || 0);
+
+      const custom =
+        sumCustomLines((r as any)?.customCharges) +
+        sumCustomLines((r as any)?.customAbonnements) +
+        sumCustomLines((r as any)?.customAutres);
+
+      return s + base + custom;
+    }, 0);
+
+    const carsMonthly = (cars ?? []).reduce((s, c) => {
+      const base =
+        (Number(c?.assurance) || 0) +
+        (Number(c?.carburant) || 0) +
+        (Number(c?.entretien) || 0) +
+        (Number(c?.credit) || 0) +
+        (Number(c?.parking) || 0) +
+        (Number(c?.peage) || 0);
+
+      const custom = (c?.customMonthly ?? []).reduce((ss: number, l: any) => ss + (Number(l?.amount) || 0), 0);
+      return s + base + custom;
+    }, 0);
+
+    const dailyMonthly =
+      (Number(daily?.courses) || 0) +
+      (Number(daily?.loisirs) || 0) +
+      (Number(daily?.sante) || 0);
+
+    const expensesMonthly = rentalsMonthly + carsMonthly + dailyMonthly;
+
+    // Don't spam the chip too early: show it once the user entered at least something meaningful.
+    const hasAny = incomeMonthly > 0 || expensesMonthly > 0;
+    if (!hasAny) return "";
+
+    // Keep it short for mobile: show expenses first; add income if present.
+    const parts: string[] = [];
+    if (expensesMonthly > 0) parts.push(`Dép. ${fmtMoney(expensesMonthly)}/mois`);
+    if (incomeMonthly > 0) parts.push(`Rev. ${fmtMoney(incomeMonthly)}/mois`);
+    return parts.join(" · ");
+  }, [incomes, rentals, cars, daily]);
+
+  const animKey = useMemo(() => {
+    // Animate not only when the step changes, but also for micro sub-flows.
+    if (step === "people") return `people-${peopleSubStep}-${householdType ?? "u"}`;
+    if (step === "rentals") return `rentals-${rentalsSubStep}-${isTenant ? "y" : "n"}`;
+    if (step === "cars") return `cars-${carsSubStep}-${hasCar ? "y" : "n"}`;
+    return step;
+  }, [step, peopleSubStep, householdType, rentalsSubStep, isTenant, carsSubStep, hasCar]);
+
+
 const currentVisibleIdx = useMemo(() => visibleSteps.findIndex((s) => s.step === step), [visibleSteps, step]);
 
 const goToStep = (next: Step) => {
@@ -1302,7 +1452,7 @@ case "people": {
           </div>
 
           <div className="wizardNav wizBottomBar">
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => router.push("/")}>
+            <button className="btnSecondary wizExitBtn" style={{ width: 140 }} onClick={() => router.push("/")}>
               Annuler
             </button>
             <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
@@ -1396,44 +1546,37 @@ case "people": {
 }
 case "coupleStatus":
         return (
-              <div className="wizardPanel" style={{ display: "grid", gap: 12 }}>
-                <div style={{ fontWeight: 900 }}>
-                  {draftPeople?.[0]?.name?.trim() || "Personne 1"} et {draftPeople?.[1]?.name?.trim() || "Personne 2"} êtes :
+              <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
+                <div className="wizQuestion">Votre statut de couple</div>
+                <div className="wizSubQuestion">
+                  {draftPeople?.[0]?.name?.trim() || "Personne 1"} et {draftPeople?.[1]?.name?.trim() || "Personne 2"}
                 </div>
 
                 <div style={{ display: "grid", gap: 12 }}>
                   {([
-                    { v: "pacs" as const, label: "Pacsés" },
-                    { v: "marie" as const, label: "Mariés" },
-                    { v: "concubinage" as const, label: "En concubinage" },
+                    { v: "pacs" as const, title: "Pacsés", sub: "Indivision, séparation de biens…" , icon: "💍" },
+                    { v: "marie" as const, title: "Mariés", sub: "Régime matrimonial" , icon: "👰" },
+                    { v: "concubinage" as const, title: "Concubinage", sub: "Vie commune" , icon: "🏡" },
                   ] as const).map((o) => (
-                    <button
+                    <ChoiceCard
                       key={o.v}
-                      className={coupleStatus === o.v ? "btnPrimary" : "btnSecondary"}
+                      title={o.title}
+                      subtitle={o.sub}
+                      icon={o.icon}
+                      selected={coupleStatus === o.v}
                       onClick={() => {
                         setCoupleStatus(o.v);
                         markCompleted("coupleStatus");
                         persistProfile();
-                        goNext();
+                        // auto-advance (no extra click)
+                        setTimeout(() => goNext(), AUTO_ADVANCE_MS);
                       }}
-                      style={{ justifyContent: "space-between" }}
-                    >
-                      <span>{o.label}</span>
-                      <span aria-hidden className="muted" style={{ fontSize: 18, lineHeight: 1 }}>
-                        ›
-                      </span>
-                    </button>
+                    />
                   ))}
                 </div>
 
-                <div className="wizardNav" style={{ marginTop: 6 }}>
-                  <button
-                    className="btnSecondary"
-                    style={{ width: 140 }}
-                    onClick={() => {
-                      goPrev();
-                    }}
-                  >
+                <div className="wizardNav" style={{ marginTop: 2 }}>
+                  <button className="btnSecondary wizBackBtn" style={{ width: 140 }} onClick={() => goPrev()}>
                     {"< Retour"}
                   </button>
                   <div />
@@ -1442,77 +1585,112 @@ case "coupleStatus":
         );
       case "incomes":
         return (
-              <div className="wizardPanel" style={{ display: "grid", gap: 12 }}>
-                {activePeople.map((p) => (
-                  <div key={p.id} style={{ display: "grid", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                      <div style={{ fontWeight: 900 }}>{p.name}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        Total: <b>{formatEUR(totalsByPerson[p.id] ?? 0)}</b>
-                      </div>
-                    </div>
+          <div className="wizardPanel incomePanel" style={{ display: "grid", gap: 14 }}>
+            <div className="incomeTop">
+              <div style={{ display: "grid", gap: 4 }}>
+                <div className="wizQuestion" style={{ margin: 0 }}>Quels sont vos revenus ?</div>
+                <div className="wizSubQuestion" style={{ margin: 0 }}>Ajoutez vos sources principales (mensuel).</div>
+              </div>
+              <div className="incomeGlobalChip" title="Total mensuel estimé">
+                <span className="incomeGlobalChipLabel">Total</span>
+                <span className="incomeGlobalChipValue">{formatEUR(totalGlobal)}</span>
+              </div>
+            </div>
 
-                    {(incomes.filter((x) => x.personId === p.id) ?? []).map((inc) => (
-                      <div key={inc.id} className="incomeRow">
-                        <input
-                          className="input"
-                          value={inc.label}
-                          onChange={(e) =>
-                            setIncomes((prev) => prev.map((x) => (x.id === inc.id ? { ...x, label: e.target.value } : x)))
-                          }
-                          placeholder="Source de revenu"
-                        />
-                        <input
-                          className="input"
-                          inputMode="decimal"
-                          value={String(inc.amount ?? 0)}
-                          onChange={(e) =>
-                            setIncomes((prev) => prev.map((x) => (x.id === inc.id ? { ...x, amount: num(e.target.value) } : x)))
-                          }
-                          placeholder="0"
-                        />
-                        <button className="btnGhost" onClick={() => setIncomes((prev) => prev.filter((x) => x.id !== inc.id))}>
+            {activePeople.map((p) => {
+              const list = incomes.filter((x) => x.personId === p.id) ?? [];
+              const initials =
+                (p.name || "")
+                  .trim()
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((s) => (s[0] ? s[0].toUpperCase() : ""))
+                  .join("") || "?";
+
+              const addIncome = (label: string) =>
+                setIncomes((prev) => [...prev, { id: uid("inc"), personId: p.id, label, amount: 0 }]);
+
+              return (
+                <div key={p.id} className="incomeCard">
+                  <div className="incomeCardHead">
+                    <div className="incomeAvatar" aria-hidden="true">{initials}</div>
+                    <div className="incomeHeadMeta">
+                      <div className="incomePersonName">{p.name}</div>
+                      <div className="incomePersonHint">Revenus mensuels</div>
+                    </div>
+                    <div className="incomePersonTotal">{formatEUR(totalsByPerson[p.id] ?? 0)}</div>
+                  </div>
+
+                  <div className="incomeRows">
+                    {list.length === 0 ? (
+                      <div className="incomeEmpty">
+                        <div className="incomeEmptyTitle">Aucun revenu ajouté</div>
+                        <div className="incomeEmptyHint">Ajoutez au moins un salaire (ou passez si besoin).</div>
+                      </div>
+                    ) : null}
+
+                    {list.map((inc) => (
+                      <div key={inc.id} className="incomeRowNew">
+                        <div className="incomeLabelWrap">
+                          <span className="incomeRowIcon" aria-hidden="true">💼</span>
+                          <input
+                            className="input incomeLabelInput"
+                            value={inc.label}
+                            onChange={(e) =>
+                              setIncomes((prev) => prev.map((x) => (x.id === inc.id ? { ...x, label: e.target.value } : x)))
+                            }
+                            placeholder="Ex: Salaire, Prime, APL…"
+                          />
+                        </div>
+
+                        <div className="incomeAmountWrap">
+                          <input
+                            className="input incomeAmountInput"
+                            inputMode="numeric"
+                            value={String(inc.amount ?? 0)}
+                            onChange={(e) =>
+                              setIncomes((prev) => prev.map((x) => (x.id === inc.id ? { ...x, amount: num(e.target.value) } : x)))
+                            }
+                            placeholder="0"
+                            aria-label="Montant en euros par mois"
+                          />
+                          <div className="incomeAmountSuffix" aria-hidden="true">€</div>
+                        </div>
+
+                        <button className="iconBtn" title="Supprimer" onClick={() => setIncomes((prev) => prev.filter((x) => x.id !== inc.id))}>
                           ✕
                         </button>
                       </div>
                     ))}
-
-                    <button
-                      className="btnSecondary"
-                      onClick={() =>
-                        setIncomes((prev) => [
-                          ...prev,
-                          { id: uid("inc"), personId: p.id, label: "Salaire", amount: 0 },
-                        ])
-                      }
-                    >
-                      + Ajouter une source
-                    </button>
                   </div>
-                ))}
 
-                <div className="card" style={{ padding: 12, background: "rgba(0,0,0,0.03)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span className="muted">Total global</span>
-                    <b>{formatEUR(totalGlobal)}</b>
+                  <div className="incomeQuickAdd">
+                    <button className="chipBtn" onClick={() => addIncome("Salaire")}>+ Salaire</button>
+                    <button className="chipBtn" onClick={() => addIncome("Prime")}>+ Prime</button>
+                    <button className="chipBtn" onClick={() => addIncome("Autre")}>+ Autre</button>
+                    <button className="chipBtn isGhost" onClick={() => addIncome("Revenu")}>+ Ajouter</button>
                   </div>
                 </div>
+              );
+            })}
 
-                <div className="wizardNav">
-                  <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>{"< Retour"}</button>
-                  <button
-                    className="btnPrimary"
-                    style={{ width: 140 }}
-                    onClick={() => {
-                      markCompleted("incomes");
-                      persistProfile();
-                      goNext();
-                    }}
-                  >
-                    Suivant ›
-                  </button>
-                </div>
-              </div>
+            <div className="wizardNav">
+              <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
+                {"< Retour"}
+              </button>
+              <button
+                className="btnPrimary"
+                style={{ width: 140 }}
+                onClick={() => {
+                  markCompleted("incomes");
+                  persistProfile();
+                  goNext();
+                }}
+              >
+                Suivant ›
+              </button>
+            </div>
+          </div>
         );
       case "situation":
         return (
@@ -1541,24 +1719,19 @@ case "coupleStatus":
           />
 
           <div className="wizardNav wizBottomBar">
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
+            <button className="btnSecondary wizBackBtn" style={{ width: 140 }} onClick={() => goPrev()}>
               {"< Retour"}
             </button>
-            <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
-              Choisissez une option pour continuer
-              <div>
-                <button
-                  type="button"
-                  className="wizSkipLink"
-                  onClick={() => {
-                    setIsOwner(false);
-                    skipStep();
-                  }}
-                >
-                  Passer cette étape
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              className="wizSkipLink"
+              onClick={() => {
+                setIsOwner(false);
+                skipStep();
+              }}
+            >
+              Passer cette étape
+            </button>
           </div>
         </div>
         );
@@ -1878,25 +2051,20 @@ case "rentals": {
         />
 
         <div className="wizardNav wizBottomBar">
-          <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
+          <button className="btnSecondary wizBackBtn" style={{ width: 140 }} onClick={() => goPrev()}>
             {"< Retour"}
           </button>
-          <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
-            Choisissez une option pour continuer
-            <div>
-              <button
-                type="button"
-                className="wizSkipLink"
-                onClick={() => {
-                  setIsTenant(false);
-                  setRentals([]);
-                  skipStep();
-                }}
-              >
-                Passer cette étape
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            className="wizSkipLink"
+            onClick={() => {
+              setIsTenant(false);
+              setRentals([]);
+              skipStep();
+            }}
+          >
+            Passer cette étape
+          </button>
         </div>
       </div>
     );
@@ -1912,7 +2080,9 @@ case "rentals": {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ fontWeight: 900 }}>Mes locations</div>
-        <button className="btnSecondary" onClick={openNewRental}>+ Ajouter</button>
+        {rentals.length > 0 ? (
+          <button className="btnSecondary" onClick={openNewRental}>+ Ajouter</button>
+        ) : null}
       </div>
 
       {rentals.length === 0 ? (
@@ -2115,17 +2285,12 @@ case "cars": {
         />
 
         <div className="wizardNav wizBottomBar">
-          <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
+          <button className="btnSecondary wizBackBtn" style={{ width: 140 }} onClick={() => goPrev()}>
             {"< Retour"}
           </button>
-          <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
-            Choisissez une option pour continuer
-            <div>
-              <button type="button" className="wizSkipLink" onClick={() => { setHasCar(false); setCars([]); skipStep(); }}>
-                Passer cette étape
-              </button>
-            </div>
-          </div>
+          <button type="button" className="wizSkipLink" onClick={() => { setHasCar(false); setCars([]); skipStep(); }}>
+            Passer cette étape
+          </button>
         </div>
       </div>
     );
@@ -2141,7 +2306,9 @@ case "cars": {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ fontWeight: 900 }}>Mes voitures</div>
-        <button className="btnSecondary" onClick={openNewCar}>+ Ajouter</button>
+        {cars.length > 0 ? (
+          <button className="btnSecondary" onClick={openNewCar}>+ Ajouter</button>
+        ) : null}
       </div>
 
       {cars.length === 0 ? (
@@ -2405,7 +2572,7 @@ case "summary": {
         </button>
       </div>
 
-      <button className="btnSecondary" onClick={() => router.push("/")}>Retour à l’accueil</button>
+      <button className="btnSecondary wizExitBtn" onClick={() => router.push("/")}>Retour à l’accueil</button>
     </div>
   );
 }
@@ -2415,6 +2582,22 @@ default:
   };
   return (
     <>
+      <ConfirmModal
+        open={quitOpen}
+        title="Quitter l’assistant ?"
+        description="Vos informations déjà saisies seront conservées, mais vous pourrez reprendre plus tard."
+        confirmText="Quitter"
+        cancelText="Continuer"
+        danger
+        onCancel={() => setQuitOpen(false)}
+        onConfirm={() => {
+          setQuitOpen(false);
+          persistProfile();
+          persistBudgetStores();
+          router.push("/");
+        }}
+      />
+
       <div className="wizardWrap">
         <div className="wizardCrumbSpacer" />
         <div className="wizardLayout">
@@ -2447,16 +2630,21 @@ default:
           </div>
 
           {/* Content */}
-          <div className="card wizardContentCard" style={{ padding: 14, display: "grid", gap: 12 }}>
-            <WizardTopProgress
-              current={Math.max(1, visibleSteps.findIndex((s) => s.step === step) + 1)}
-              total={Math.max(1, visibleSteps.length)}
-              label={stepTitle(step)}
-            />
-            <div key={step} className={`wizardStepAnim ${stepAnimDir === "next" ? "animNext" : "animPrev"}`}>
+          <div className="card wizardContentCard">
+            <div className="wizardContentInner">
+              <WizardTopProgress
+                current={Math.max(1, visibleSteps.findIndex((s) => s.step === step) + 1)}
+                total={Math.max(1, visibleSteps.length)}
+                label={stepTitle(step)}
+                chip={resumeChip}
+                onQuit={() => setQuitOpen(true)}
+              />
 
-                    {renderStep()}
-
+              <div className="wizardContentBody">
+                <div key={animKey} className={`wizardStepAnim ${stepAnimDir === "next" ? "animNext" : "animPrev"}`}>
+                  {renderStep()}
+                </div>
+              </div>
             </div>
           </div>
         </div>
