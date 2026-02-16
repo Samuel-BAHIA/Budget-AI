@@ -864,6 +864,10 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
 
   const [daily, setDaily] = useState<DailyLife>({});
 
+  // Daily step UX: presets + show explicit confirmation only after manual adjustment.
+  const [dailyInteracted, setDailyInteracted] = useState(false);
+  const [dailyPresetUsed, setDailyPresetUsed] = useState<null | "small" | "medium" | "large">(null);
+
   // Ensure a default income line exists for each person when entering the income step.
   useEffect(() => {
     if (step !== "incomes") return;
@@ -2240,10 +2244,59 @@ case "daily": {
 
   const setDailyField = (k: string, v: number) => setDaily((prev: any) => ({ ...(prev ?? {}), [k]: v }));
 
+  const DAILY_PRESETS: Array<{ key: "small" | "medium" | "large"; label: string; hint: string; v: { courses: number; loisirs: number; sante: number } }> = [
+    { key: "small", label: "Petit", hint: "Serré", v: { courses: 350, loisirs: 150, sante: 80 } },
+    { key: "medium", label: "Moyen", hint: "Équilibré", v: { courses: 600, loisirs: 300, sante: 120 } },
+    { key: "large", label: "Large", hint: "Confort", v: { courses: 900, loisirs: 500, sante: 200 } },
+  ];
+
+  const applyPresetAndContinue = (key: "small" | "medium" | "large") => {
+    const p = DAILY_PRESETS.find((x) => x.key === key);
+    if (!p) return;
+    setDaily(p.v);
+    setDailyPresetUsed(key);
+    setDailyInteracted(false);
+    // UX: let selection be visible briefly before navigating.
+    setTimeout(() => {
+      markCompleted("daily");
+      persistProfile();
+      goNext();
+    }, 180);
+  };
+
   return (
     <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
       <div className="wizQuestion">Estimons vos dépenses courantes par mois.</div>
       <div className="muted" style={{ fontSize: 13 }}>Ajustez rapidement, vous affinerez ensuite.</div>
+
+      {/* Quick presets (tap = auto-next). */}
+      <div className="wizChips" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {DAILY_PRESETS.map((p) => {
+          const active = dailyPresetUsed === p.key;
+          return (
+            <button
+              key={p.key}
+              type="button"
+              className={`wizChip ${active ? "isActive" : ""}`}
+              onClick={() => applyPresetAndContinue(p.key)}
+              title={`${p.label} — ${p.hint}`}
+            >
+              <span style={{ fontWeight: 900 }}>{p.label}</span>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>{p.hint}</span>
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          className={`wizChip ${dailyInteracted ? "isActive" : ""}`}
+          onClick={() => setDailyInteracted(true)}
+          title="Ajuster manuellement"
+        >
+          <span style={{ fontWeight: 900 }}>Personnalisé</span>
+          <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Ajuster</span>
+        </button>
+      </div>
 
       {[
         { k: "courses", label: "Courses", sub: "Alimentation, hygiène", max: 1500, val: courses },
@@ -2265,7 +2318,11 @@ case "daily": {
             max={s.max}
             step={10}
             value={s.val}
-            onChange={(e) => setDailyField(s.k, num(e.target.value))}
+            onChange={(e) => {
+              setDailyInteracted(true);
+              setDailyPresetUsed(null);
+              setDailyField(s.k, num(e.target.value));
+            }}
           />
         </div>
       ))}
@@ -2279,17 +2336,35 @@ case "daily": {
         <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
           {"< Retour"}
         </button>
-        <button
-          className="btnPrimary"
-          style={{ width: 140 }}
-          onClick={() => {
-            markCompleted("daily");
-            persistProfile();
-            goNext();
-          }}
-        >
-          Terminer ›
-        </button>
+        {dailyInteracted ? (
+          <button
+            className="btnPrimary"
+            style={{ width: 140 }}
+            onClick={() => {
+              markCompleted("daily");
+              persistProfile();
+              goNext();
+            }}
+          >
+            OK ›
+          </button>
+        ) : total > 0 ? (
+          <button
+            className="btnPrimary"
+            style={{ width: 140 }}
+            onClick={() => {
+              markCompleted("daily");
+              persistProfile();
+              goNext();
+            }}
+          >
+            Continuer ›
+          </button>
+        ) : (
+          <div className="muted" style={{ fontSize: 12, alignSelf: "center", textAlign: "right" }}>
+            Choisissez un preset ou passez l’étape.
+          </div>
+        )}
       </div>
 
       <button type="button" className="wizSkipLink" onClick={() => skipStep()}>
