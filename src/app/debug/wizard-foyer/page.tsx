@@ -1,5 +1,8 @@
-import DEBUG_WizardFoyerDebugPage from "@/components/debug/DEBUG_WizardFoyerDebugPage";
-
 export default function Page() {
-  return <DEBUG_WizardFoyerDebugPage />;
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Debug Wizard Foyer</h1>
+      <p>Cette page de debug n&apos;est plus disponible.</p>
+    </main>
+  );
 }

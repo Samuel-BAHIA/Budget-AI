@@ -1862,6 +1862,9 @@ html, body {
   display: flex;
   justify-content: center;
   min-height: 100dvh;
+  /* Prevent the glow/background layers (and any nested sheets) from creating
+     a horizontal scrollbar on mobile browsers. */
+  overflow-x: hidden;
 }
 
 .wizardLayout {
