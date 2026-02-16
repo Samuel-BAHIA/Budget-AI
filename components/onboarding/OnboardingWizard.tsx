@@ -65,6 +65,9 @@ import {
   keyRentalsFoyer,
 } from "@/components/data/storageKeys";
 
+// Small UX constant: delay before auto-advancing after a choice (lets the user see feedback)
+const AUTO_ADVANCE_MS = 180;
+
 
 // === TYPES & CONSTANTS =====================================================
 type Step =
@@ -217,6 +220,91 @@ function ChoiceCard(props: {
   );
 }
 
+
+function StepIcon(props: { step: Step }) {
+  // Minimal inline icons (no dependency).
+  // Keep shapes simple so they render nicely at small sizes.
+  const common = {
+    width: 18,
+    height: 18,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+  } as const;
+
+  switch (props.step) {
+    case "people":
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5S14.34 11 16 11Z" stroke="currentColor" strokeWidth="2" />
+          <path d="M8 12c1.66 0 3-1.79 3-4S9.66 4 8 4 5 5.79 5 8s1.34 4 3 4Z" stroke="currentColor" strokeWidth="2" />
+          <path d="M2 20c0-3 3-5 6-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M14 15c4 0 8 2 8 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "coupleStatus":
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2" />
+          <path d="M17 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2" />
+          <path d="M2 20c0-3 2-5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M22 20c0-3-2-5-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M9 20c0-3 1.5-6 3-6s3 3 3 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "incomes":
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M12 3v18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M17 7c0-1.66-2.24-3-5-3S7 5.34 7 7s2.24 3 5 3 5 1.34 5 3-2.24 3-5 3-5-1.34-5-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "situation":
+    case "owner":
+    case "owners":
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+        </svg>
+      );
+    case "rentals":
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M4 21V8l8-5 8 5v13" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M9 21v-6h6v6" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M8 10h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "cars":
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M5 16l1.5-6A2 2 0 0 1 8.44 8h7.12a2 2 0 0 1 1.94 2L19 16" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M7 16h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M7.5 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" fill="currentColor" />
+          <path d="M16.5 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" fill="currentColor" />
+        </svg>
+      );
+    case "daily":
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M4 19h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M6 16V8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M12 16V5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M18 16v-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "summary":
+    default:
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-3 2-3-2-3 2V5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M9 8h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M9 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+  }
+}
+
 /**
  * CurrencyField
  * A pragmatic (safe) money input: user types numbers, we store number,
@@ -229,6 +317,7 @@ function CurrencyField(props: {
   placeholder?: string;
   onChange: (v: number) => void;
   hint?: string;
+  onEnter?: () => void;
 }) {
   const v = Number(props.value ?? 0);
   return (
@@ -238,6 +327,12 @@ function CurrencyField(props: {
         className="input"
         inputMode="numeric"
         value={Number.isFinite(v) ? (v === 0 ? "" : String(v)) : ""}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && props.onEnter) {
+            e.preventDefault();
+            props.onEnter();
+          }
+        }}
         onChange={(e) => props.onChange(num(e.target.value))}
         placeholder={props.placeholder ?? "0"}
       />
@@ -657,6 +752,8 @@ export default function OnboardingWizard() {
 
   // "people" step is now a 2-screen micro-flow (1) household type, (2) identity.
   const [peopleSubStep, setPeopleSubStep] = useState<1 | 2>(1);
+  const name1Ref = useRef<HTMLInputElement | null>(null);
+  const name2Ref = useRef<HTMLInputElement | null>(null);
 
 
 // Sub-steps to keep "one question per screen" while reusing existing step keys.
@@ -1116,6 +1213,23 @@ const goNext = () => {
   if (next) goToStep(next);
 };
 
+// Convenience: apply a state update, then automatically move forward.
+// Used for choice-only questions (Yes/No, single selection) to avoid extra taps.
+const autoAdvanceToNextStep = (afterStateUpdate?: () => void) => {
+  afterStateUpdate?.();
+  // Give React a beat to render the selected state before navigating.
+  window.setTimeout(() => {
+    markCompleted(step);
+    persistProfile();
+    goNext();
+  }, AUTO_ADVANCE_MS);
+};
+
+const autoAdvanceToSubStep = (setSubStep: (v: number) => void, v: number, afterStateUpdate?: () => void) => {
+  afterStateUpdate?.();
+  window.setTimeout(() => setSubStep(v), AUTO_ADVANCE_MS);
+};
+
 const skipStep = () => {
   resetStepData(step);
   markSkipped(step);
@@ -1133,6 +1247,16 @@ case "people": {
     ? name1.length > 0
     : name1.length > 0 && name2.length > 0;
 
+  const finishPeople = () => {
+    const id = createFoyerWithPeople(
+      (householdType === "couple" ? [name1, name2] : [name1]).map((n) => ({ name: n }))
+    );
+    setFoyerId(id);
+    markCompleted("people");
+    persistProfile();
+    goNext();
+  };
+
   return (
     <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
       {peopleSubStep === 1 ? (
@@ -1149,8 +1273,10 @@ case "people": {
               subtitle="Budget individuel"
               selected={householdType === "single"}
               onClick={() => {
-                setHouseholdType("single");
-                setDraftPeople((prev) => [{ ...(prev[0] ?? { name: "" }) }]);
+                autoAdvanceToSubStep(setPeopleSubStep, 2, () => {
+                  setHouseholdType("single");
+                  setDraftPeople((prev) => [{ ...(prev[0] ?? { name: "" }) }]);
+                });
               }}
             />
             <ChoiceCard
@@ -1159,11 +1285,13 @@ case "people": {
               subtitle="Budget de foyer"
               selected={householdType === "couple"}
               onClick={() => {
-                setHouseholdType("couple");
-                setDraftPeople((prev) => {
-                  const p1 = prev?.[0] ?? { name: "" };
-                  const p2 = prev?.[1] ?? { name: "" };
-                  return [p1, p2].slice(0, 2);
+                autoAdvanceToSubStep(setPeopleSubStep, 2, () => {
+                  setHouseholdType("couple");
+                  setDraftPeople((prev) => {
+                    const p1 = prev?.[0] ?? { name: "" };
+                    const p2 = prev?.[1] ?? { name: "" };
+                    return [p1, p2].slice(0, 2);
+                  });
                 });
               }}
             />
@@ -1173,14 +1301,9 @@ case "people": {
             <button className="btnSecondary" style={{ width: 140 }} onClick={() => router.push("/")}>
               Annuler
             </button>
-            <button
-              className="btnPrimary"
-              style={{ width: 140 }}
-              disabled={!householdType}
-              onClick={() => setPeopleSubStep(2)}
-            >
-              Continuer ›
-            </button>
+            <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
+              Touchez une carte pour continuer
+            </div>
           </div>
         </>
       ) : (
@@ -1192,9 +1315,20 @@ case "people": {
             <label className="min0" style={{ display: "grid", gap: 6 }}>
               <span className="muted" style={{ fontSize: 12 }}>Votre prénom</span>
               <input
+                ref={name1Ref}
                 className={`input ${name1.length > 0 && name1.length < 2 ? "inputInvalid" : ""}`}
                 value={draftPeople?.[0]?.name ?? ""}
                 maxLength={20}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  // Couple: Enter on first field moves to the second field.
+                  if (householdType === "couple") {
+                    name2Ref.current?.focus();
+                    return;
+                  }
+                  if (canContinueIdentity) finishPeople();
+                }}
                 onChange={(e) =>
                   setDraftPeople((prev) => {
                     const next = [...prev];
@@ -1210,9 +1344,16 @@ case "people": {
               <label className="min0" style={{ display: "grid", gap: 6 }}>
                 <span className="muted" style={{ fontSize: 12 }}>Prénom du conjoint</span>
                 <input
+                  ref={name2Ref}
                   className={`input ${name2.length > 0 && name2.length < 2 ? "inputInvalid" : ""}`}
                   value={draftPeople?.[1]?.name ?? ""}
                   maxLength={20}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (canContinueIdentity) finishPeople();
+                    }
+                  }}
                   onChange={(e) =>
                     setDraftPeople((prev) => {
                       const next = [...prev];
@@ -1239,15 +1380,7 @@ case "people": {
               className="btnPrimary"
               style={{ width: 140 }}
               disabled={!canContinueIdentity}
-              onClick={() => {
-                const id = createFoyerWithPeople(
-                  (householdType === "couple" ? [name1, name2] : [name1]).map((n) => ({ name: n }))
-                );
-                setFoyerId(id);
-                markCompleted("people");
-                persistProfile();
-                goNext();
-              }}
+              onClick={finishPeople}
             >
               Continuer ›
             </button>
@@ -1388,8 +1521,18 @@ case "coupleStatus":
           <YesNoToggle
             value={isOwner}
             onChange={(v) => {
-              setIsOwner(v);
-              if (!v) markSkipped("owners");
+              // Auto-advance on choice to avoid extra "Continuer" taps.
+              if (v === true) {
+                autoAdvanceToNextStep(() => {
+                  setIsOwner(true);
+                });
+              } else {
+                autoAdvanceToNextStep(() => {
+                  setIsOwner(false);
+                  setOwners([]);
+                  markSkipped("owners");
+                });
+              }
             }}
           />
 
@@ -1397,37 +1540,22 @@ case "coupleStatus":
             <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
               {"< Retour"}
             </button>
-
-            <button
-              className="btnPrimary"
-              style={{ width: 140 }}
-              disabled={isOwner === undefined}
-              onClick={() => {
-                markCompleted("situation");
-                persistProfile();
-                if (isOwner === true) {
-                  goNext();
-                } else {
-                  setOwners([]);
-                  markSkipped("owners");
-                  goNext();
-                }
-              }}>
-              Continuer ›
-            </button>
+            <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
+              Choisissez une option pour continuer
+              <div>
+                <button
+                  type="button"
+                  className="wizSkipLink"
+                  onClick={() => {
+                    setIsOwner(false);
+                    skipStep();
+                  }}
+                >
+                  Passer cette étape
+                </button>
+              </div>
+            </div>
           </div>
-
-          <button
-            type="button"
-            className="wizSkipLink"
-            onClick={() => {
-              setIsOwner(false);
-              markSkipped("situation");
-              skipStep();
-            }}
-          >
-            Passer cette étape
-          </button>
         </div>
         );
       
@@ -1730,8 +1858,18 @@ case "rentals": {
         <YesNoToggle
           value={isTenant}
           onChange={(v) => {
-            setIsTenant(v);
-            if (!v) setRentals([]);
+            // Auto-advance: yes -> open list, no -> next step.
+            if (v === true) {
+              autoAdvanceToSubStep(setRentalsSubStep, 2, () => {
+                setIsTenant(true);
+              });
+            } else {
+              autoAdvanceToNextStep(() => {
+                setIsTenant(false);
+                setRentals([]);
+                setRentalsSubStep(1);
+              });
+            }
           }}
         />
 
@@ -1739,31 +1877,23 @@ case "rentals": {
           <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
             {"< Retour"}
           </button>
-          <button
-            className="btnPrimary"
-            style={{ width: 140 }}
-            disabled={isTenant === undefined}
-            onClick={() => {
-              markCompleted("rentals");
-              persistProfile();
-              goNext();
-            }}
-          >
-            Continuer ›
-          </button>
+          <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
+            Choisissez une option pour continuer
+            <div>
+              <button
+                type="button"
+                className="wizSkipLink"
+                onClick={() => {
+                  setIsTenant(false);
+                  setRentals([]);
+                  skipStep();
+                }}
+              >
+                Passer cette étape
+              </button>
+            </div>
+          </div>
         </div>
-
-        <button
-          type="button"
-          className="wizSkipLink"
-          onClick={() => {
-            setIsTenant(false);
-            setRentals([]);
-            skipStep();
-          }}
-        >
-          Passer cette étape
-        </button>
       </div>
     );
   }
@@ -1846,7 +1976,12 @@ case "rentals": {
             <CurrencyField label="Électricité" value={(rentalDraft as any)?.elec ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), elec: v }))} />
             <CurrencyField label="Gaz" value={(rentalDraft as any)?.gaz ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), gaz: v }))} />
             <CurrencyField label="Internet" value={(rentalDraft as any)?.internet ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), internet: v }))} />
-            <CurrencyField label="Assurance habitation" value={(rentalDraft as any)?.assurance ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), assurance: v }))} />
+            <CurrencyField
+              label="Assurance habitation"
+              value={(rentalDraft as any)?.assurance ?? 0}
+              onChange={(v) => setRentalDraft((p) => ({ ...(p as any), assurance: v }))}
+              onEnter={saveRental}
+            />
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -1960,8 +2095,18 @@ case "cars": {
         <YesNoToggle
           value={hasCar}
           onChange={(v) => {
-            setHasCar(v);
-            if (!v) setCars([]);
+            // Auto-advance: yes -> open list, no -> next step.
+            if (v === true) {
+              autoAdvanceToSubStep(setCarsSubStep, 2, () => {
+                setHasCar(true);
+              });
+            } else {
+              autoAdvanceToNextStep(() => {
+                setHasCar(false);
+                setCars([]);
+                setCarsSubStep(1);
+              });
+            }
           }}
         />
 
@@ -1969,23 +2114,15 @@ case "cars": {
           <button className="btnSecondary" style={{ width: 140 }} onClick={() => goPrev()}>
             {"< Retour"}
           </button>
-          <button
-            className="btnPrimary"
-            style={{ width: 140 }}
-            disabled={hasCar === undefined}
-            onClick={() => {
-              markCompleted("cars");
-              persistProfile();
-              goNext();
-            }}
-          >
-            Continuer ›
-          </button>
+          <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
+            Choisissez une option pour continuer
+            <div>
+              <button type="button" className="wizSkipLink" onClick={() => { setHasCar(false); setCars([]); skipStep(); }}>
+                Passer cette étape
+              </button>
+            </div>
+          </div>
         </div>
-
-        <button type="button" className="wizSkipLink" onClick={() => { setHasCar(false); setCars([]); skipStep(); }}>
-          Passer cette étape
-        </button>
       </div>
     );
   }
@@ -2052,7 +2189,12 @@ case "cars": {
             <CurrencyField label="Assurance" value={(carDraft as any)?.assurance ?? 0} onChange={(v) => setCarDraft((p) => ({ ...(p as any), assurance: v }))} />
             <CurrencyField label="Essence" value={(carDraft as any)?.carburant ?? 0} onChange={(v) => setCarDraft((p) => ({ ...(p as any), carburant: v }))} />
             <CurrencyField label="Entretien" value={(carDraft as any)?.entretien ?? 0} onChange={(v) => setCarDraft((p) => ({ ...(p as any), entretien: v }))} />
-            <CurrencyField label="Crédit auto" value={(carDraft as any)?.credit ?? 0} onChange={(v) => setCarDraft((p) => ({ ...(p as any), credit: v }))} />
+            <CurrencyField
+              label="Crédit auto"
+              value={(carDraft as any)?.credit ?? 0}
+              onChange={(v) => setCarDraft((p) => ({ ...(p as any), credit: v }))}
+              onEnter={saveCar}
+            />
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -2202,7 +2344,7 @@ default:
         <div className="wizardCrumbSpacer" />
         <div className="wizardLayout">
           {/* Sidebar */}
-          <div className="card" style={{ padding: 14 }}>
+          <div className="card wizardSidebarCard" style={{ padding: 14 }}>
             <div className="wizardSidebarTitle">Création d’un foyer</div>
             <div className="wizardSteps">
               {visibleSteps.map((s, idx) => {
@@ -2215,10 +2357,13 @@ default:
                     key={s.step}
                     className={`wizardStep ${current ? "wizardStepActive" : ""} ${done ? "wizardStepDone" : ""} ${muted ? "wizardStepMuted" : ""} ${skipped ? "wizardStepSkipped" : ""}`}
                   >
-                    <span className="muted" style={{ width: 18, textAlign: "right" }}>{idx + 1}</span>
-                    <span className="chev">›</span>
+                    <span className="wizStepIdx" aria-hidden="true">{idx + 1}</span>
+                    <span className={`wizStepIcon ${current ? "isActive" : ""}`} aria-hidden="true"><StepIcon step={s.step} /></span>
                     <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {s.label}
+                    </span>
+                    <span className="wizStepMeta" aria-hidden="true">
+                      {done ? "✓" : skipped ? "—" : ""}
                     </span>
                   </div>
                 );
@@ -2227,7 +2372,7 @@ default:
           </div>
 
           {/* Content */}
-          <div className="card" style={{ padding: 14, display: "grid", gap: 12 }}>
+          <div className="card wizardContentCard" style={{ padding: 14, display: "grid", gap: 12 }}>
             <WizardTopProgress
               current={Math.max(1, visibleSteps.findIndex((s) => s.step === step) + 1)}
               total={Math.max(1, visibleSteps.length)}
