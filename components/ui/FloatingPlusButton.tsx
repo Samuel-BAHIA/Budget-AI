@@ -56,8 +56,6 @@ function typeLabel(t: FlowType) {
  * - Quand `onSelectType` est fourni : "speed dial" ( + → 5 types de flux )
  *
  * IMPORTANT (mobile):
- * - Le stack (6 boutons) tient verticalement entre topbar et bottomNav.
- * - On calcule dynamiquement la taille des boutons en fonction de la hauteur dispo.
  */
 export default function FloatingPlusButton({
   onClick,
@@ -70,7 +68,13 @@ export default function FloatingPlusButton({
   // an overflow scrolling container may scroll with the content.
   // Rendering the FAB through a portal (to `document.body`) makes it truly fixed.
   const [mounted, setMounted] = useState(false);
-  const [open, setOpen] = useState(false);
+  // Mobile: compact context menu state
+  // collapsed  -> shows only "…"
+  // main       -> shows return + (+) + (grid)
+  // add        -> shows return + (+) + add-type buttons (no grid)
+  const [mobileMode, setMobileMode] = useState<"collapsed" | "main" | "add">("collapsed");
+  // Optional: nested speed-dial for flow types (opened by the + button).
+  const [speedOpen, setSpeedOpen] = useState(false);
 
   const [fab, setFab] = useState(() => ({
     size: 52,
@@ -84,17 +88,24 @@ export default function FloatingPlusButton({
 
   // Close on route changes / escape / outside click
   useEffect(() => {
-    if (!open) return;
+    const mobileOpen = mobileMode !== "collapsed";
+    if (!mobileOpen && !speedOpen) return;
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setSpeedOpen(false);
+        setMobileMode("collapsed");
+      }
     };
 
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (!t) return;
       // Close if click isn't inside the stack
-      if (!t.closest?.(".fabStack")) setOpen(false);
+      if (!t.closest?.(".fabStack")) {
+        setSpeedOpen(false);
+        setMobileMode("collapsed");
+      }
     };
 
     window.addEventListener("keydown", onKey);
@@ -103,47 +114,12 @@ export default function FloatingPlusButton({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [open]);
+  }, [mobileMode, speedOpen]);
 
   useLayoutEffect(() => {
     if (!mounted) return;
-
-    const recalc = () => {
-      const topbar = document.querySelector<HTMLElement>(".topbar");
-      const bottomNav = document.querySelector<HTMLElement>(".bottomNav");
-
-      const topbarH = topbar?.getBoundingClientRect().height ?? 64;
-      const bottomH = bottomNav?.getBoundingClientRect().height ?? 0;
-
-      const marginTop = 10;
-      const marginBottom = bottomH > 0 ? 10 : 16;
-      const gap = 8;
-      const nButtons = 6; // + + 5 actions
-      const available = Math.max(220, window.innerHeight - (topbarH + bottomH + marginTop + marginBottom));
-
-      // Diameter that fits all buttons + gaps within the available height.
-      const raw = Math.floor((available - gap * (nButtons - 1)) / nButtons);
-
-      // Keep it within a nice range (still computed from constraints).
-      const size = Math.max(40, Math.min(56, raw));
-
-      setFab({
-        size,
-        top: Math.round(topbarH + marginTop),
-        bottom: Math.round(bottomH + marginBottom),
-        gap,
-        right: 16,
-      });
-    };
-
-    recalc();
-
-    window.addEventListener("resize", recalc);
-    window.addEventListener("orientationchange", recalc);
-    return () => {
-      window.removeEventListener("resize", recalc);
-      window.removeEventListener("orientationchange", recalc);
-    };
+    // No top/bottom bars anymore: keep a stable FAB layout.
+    setFab({ size: 52, top: 0, bottom: 16, gap: 8, right: 16 });
   }, [mounted]);
 
   const items = useMemo<FlowType[]>(
@@ -152,25 +128,83 @@ export default function FloatingPlusButton({
   );
 
   const speedDial = mounted && !!onSelectType;
+  const mobile = mounted && isMobile();
+
+  // Heuristic: show the "columns filter" shortcut on dashboard pages (Sankey/lines).
+  const showColumnsFilter =
+    mounted && mobile && typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard");
 
   const handlePlus = () => {
     if (disabled) return;
+
+    // Mobile: clicking + from "main" goes to "add" (show add-only actions).
+    if (mobile) {
+      if (mobileMode === "main") {
+        setMobileMode("add");
+        // In add mode, show type buttons immediately when available.
+        if (speedDial) setSpeedOpen(true);
+        // If no speed dial, behave like a normal add then collapse.
+        if (!speedDial) {
+          onClick();
+          setMobileMode("collapsed");
+        }
+        return;
+      }
+    }
+
     if (!speedDial) {
       onClick();
       return;
     }
-    setOpen((v) => !v);
+    setSpeedOpen((v) => !v);
   };
 
   const handleSelect = (t: FlowType) => {
     if (disabled) return;
     onSelectType?.(t);
-    setOpen(false);
+    setSpeedOpen(false);
+    setMobileMode("collapsed");
   };
+
+  const handleMore = () => {
+    if (disabled) return;
+    // "…" opens the main menu.
+    setMobileMode("main");
+    setSpeedOpen(false);
+  };
+
+  const handleReturn = () => {
+    if (disabled) return;
+    if (mobileMode === "add") {
+      // Back to the main menu (+ + grid)
+      setMobileMode("main");
+      setSpeedOpen(false);
+    } else {
+      // Back to collapsed (…)
+      setMobileMode("collapsed");
+      setSpeedOpen(false);
+    }
+  };
+
+  const handleColumns = () => {
+    if (disabled) return;
+    // Let interested pages open their own column picker.
+    window.dispatchEvent(new CustomEvent("budget:columns:toggle"));
+    // Keep it snappy on mobile.
+    setMobileMode("collapsed");
+  };
+
+
+  const showMain = mobile && mobileMode === "main";
+  const showAdd = mobile && mobileMode === "add";
+
+  const showTypeActions = speedDial && ((mobile && showAdd) || (!mobile && speedOpen));
+  const showGridButton = showColumnsFilter && showMain;
+  const showPlusButton = !mobile || showMain;
 
   const stack = (
     <div
-      className={`fabStack ${open ? "fabStackOpen" : ""}`}
+      className={`fabStack ${mobileMode !== "collapsed" || speedOpen ? "fabStackOpen" : ""}`}
       style={
         {
           top: fab.top,
@@ -182,38 +216,82 @@ export default function FloatingPlusButton({
       }
       aria-hidden={disabled ? "true" : undefined}
     >
-      {/* actions */}
-      {speedDial
+      {/* Add-type actions (only rendered when visible) */}
+      {showTypeActions
         ? items.map((t) => (
             <button
               key={t}
               type="button"
-              className={`fabAction ${open ? "fabActionShow" : "fabActionHide"}`}
+              className="fabAction fabActionShow"
               onClick={() => handleSelect(t)}
               aria-label={`Ajouter : ${typeLabel(t)}`}
               title={`Ajouter : ${typeLabel(t)}`}
-              // When hidden, the buttons must not be clickable nor focusable.
-              disabled={disabled || !open}
-              tabIndex={open && !disabled ? 0 : -1}
+              disabled={disabled}
+              tabIndex={!disabled ? 0 : -1}
             >
               {typeIcon(t)}
             </button>
           ))
         : null}
 
-      {/* plus */}
-      <button
-        type="button"
-        className={`fabAdd ${speedDial && open ? "fabAddOpen" : ""}`}
-        onClick={handlePlus}
-        aria-label={ariaLabel}
-        title={title}
-        disabled={disabled}
-      >
-        +
-      </button>
+      {/* Grid / columns filter (mobile: just above +) */}
+      {showGridButton ? (
+        <button
+          type="button"
+          className="fabAction fabActionShow"
+          onClick={handleColumns}
+          aria-label="Filtrer les colonnes"
+          title="Filtrer les colonnes"
+          disabled={disabled}
+          tabIndex={!disabled ? 0 : -1}
+        >
+          ▦
+        </button>
+      ) : null}
+
+      {/* Plus (desktop always, mobile only in main menu) */}
+      {showPlusButton ? (
+        <button
+          type="button"
+          className={`fabAdd ${speedDial && speedOpen && !mobile ? "fabAddOpen" : ""} ${mobile ? "fabAddMobile" : ""}`}
+          onClick={handlePlus}
+          aria-label={ariaLabel}
+          title={title}
+          disabled={disabled}
+        >
+          +
+        </button>
+      ) : null}
+
+      {/* Mobile trigger / return (bottom-right) */}
+      {mobile ? (
+        mobileMode === "collapsed" ? (
+          <button
+            type="button"
+            className="fabMore"
+            onClick={handleMore}
+            aria-label="Actions"
+            title="Autres actions"
+            disabled={disabled}
+          >
+            …
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="fabReturn"
+            onClick={handleReturn}
+            aria-label="Retour"
+            title="Retour"
+            disabled={disabled}
+          >
+            <span className="fabReturnGlyph">↩</span>
+          </button>
+        )
+      ) : null}
     </div>
   );
+
 
   if (!mounted) return null;
   return createPortal(stack, document.body);

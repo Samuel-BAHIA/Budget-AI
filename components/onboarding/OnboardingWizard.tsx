@@ -853,6 +853,13 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
 
   const [quitOpen, setQuitOpen] = useState(false);
 
+  // Allow the global floating "X" button (AppShell) to trigger the quit flow.
+  useEffect(() => {
+    const onQuit = () => setQuitOpen(true);
+    window.addEventListener("budget:wizard:quit", onQuit as EventListener);
+    return () => window.removeEventListener("budget:wizard:quit", onQuit as EventListener);
+  }, []);
+
   const markCompleted = (s: Step) =>
     setCompletedSteps((prev) => (prev.includes(s) ? prev : [...prev, s]));
   const markSkipped = (s: Step) =>

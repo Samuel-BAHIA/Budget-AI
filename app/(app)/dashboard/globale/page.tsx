@@ -8,6 +8,7 @@ export default function DashboardGlobalPage() {
       mode="global"
       pageTitle="Personnalisée — Budget"
       showExpenseColumnReorder
+      showDashboardTabs
     />
   );
 }

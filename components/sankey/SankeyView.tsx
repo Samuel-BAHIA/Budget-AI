@@ -307,6 +307,16 @@ const [assetEdit, setAssetEdit] = useState<null | {
     return () => document.removeEventListener("mousedown", onDown);
   }, [colsMenuOpen, colsMenuPlacement]);
 
+  // Allow the floating actions menu (mobile) to open the columns picker.
+  useEffect(() => {
+    const onToggle = () => {
+      setColsMenuPlacement("bottom");
+      setColsMenuOpen((v) => !v);
+    };
+    window.addEventListener("budget:columns:toggle", onToggle as any);
+    return () => window.removeEventListener("budget:columns:toggle", onToggle as any);
+  }, []);
+
   // Mobile bottom bar action → open the columns menu as a bottom sheet.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -949,7 +959,7 @@ for (const [k, v] of agg.entries()) {
           Revenus : <b>{formatEUR(totals.totalRev)}</b> · Dépenses : <b>{formatEUR(totals.totalExp)}</b>
         </span>
       }
-      className="sankeyPage"
+      className="sankeyPage sankeyPageModern"
     >
       {showDashboardTabs ? <DashboardTabs /> : null}
 
@@ -1391,7 +1401,7 @@ for (const [k, v] of agg.entries()) {
                                   style={{
                                     position: "fixed",
                                     left: "50%",
-                                    bottom: "calc(var(--bottomnav-h, 72px) + 14px + env(safe-area-inset-bottom))",
+                                    bottom: "calc(14px + env(safe-area-inset-bottom))",
                                     transform: "translateX(-50%)",
                                     zIndex: 90,
                                     width: "min(520px, calc(100vw - 24px))",
@@ -1643,13 +1653,25 @@ for (const [k, v] of agg.entries()) {
         className="diagramFrameClip"
         style={{
           width: "100%",
-          height: "calc(100dvh - 260px)",
-          minHeight: 520,
+          height: "clamp(520px, calc(100dvh - 240px), 820px)",
           overflow: "hidden",
           borderRadius: 18,
           position: "relative",
         }}
       >
+{/* Mobile (plein écran) : mini HUD lisible au-dessus du Sankey */}
+<div className="sankeyMobileHud" aria-hidden>
+  <div className="hudRow">
+    <div className="hudTitle">Budget</div>
+    <div className="hudPills">
+      <span className="hudPill">+ {formatEUR(totals.totalRev)}</span>
+      <span className="hudPill">− {formatEUR(totals.totalExp)}</span>
+      <span className="hudPill">{(totals.totalRev - totals.totalExp) >= 0 ? "Reste" : "Découvert"} : <b>{formatEUR(totals.totalRev - totals.totalExp)}</b></span>
+    </div>
+  </div>
+  <div className="hudHint">Astuce : tape un nœud pour modifier / ouvrir l’objet.</div>
+</div>
+
         {prevDiagram ? (
           <div
             key={`prev-${prevDiagram.key}`}

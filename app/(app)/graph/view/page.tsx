@@ -65,7 +65,7 @@ export default function GeneratedGraphViewPage() {
   return (
     <PageShell
       title="Graph généré"
-      // Mobile: make this view behave like the main Sankey pages (edge-to-edge + flush under the topbar).
+      // Mobile: make this view behave like the main Sankey pages (edge-to-edge + edge-to-edge).
       className="sankeyPage"
     >
       {/*

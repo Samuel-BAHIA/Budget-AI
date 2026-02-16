@@ -1,19 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import BottomNav from "@/components/nav/BottomNav";
 import Breadcrumbs, { useBreadcrumbCrumbs } from "@/components/ui/Breadcrumbs";
-import DashboardViewSelector from "@/components/nav/DashboardViewSelector";
 import AuthMenu from "@/components/auth/AuthMenu";
 import SidebarDrawer from "@/components/nav/SidebarDrawer";
+import FloatingMenuButton from "@/components/nav/FloatingMenuButton";
 // Sidebar removed in web mode; keep layout simple.
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const isWizard = !!pathname?.startsWith("/onboarding");
 
   // Track navigation direction for page transitions.
   const lastPathRef = useRef<string>(pathname ?? "/");
@@ -91,49 +91,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Sidebar shows primary navigation + auth.
 
   const crumbs = useBreadcrumbCrumbs();
-  const mobileTitle = useMemo(() => {
-    // Override some titles for clarity on mobile
-    if (pathname?.startsWith("/depenses/variables")) return "Dépenses variables";
-    if (pathname?.startsWith("/depenses/fixes")) return "Dépenses fixes";
-    if (pathname?.startsWith("/revenus")) return "Revenus";
-    if (pathname?.startsWith("/depenses")) return "Dépenses";
-    // Dashboard title is handled by the "Vue" selector in the topbar.
-    if (pathname?.startsWith("/dashboard")) return "";
-    return crumbs.length ? crumbs[crumbs.length - 1].label : "Accueil";
-  }, [pathname, crumbs]);
+  // Keep crumbs computed even if we hide them during the wizard.
+  useMemo(() => crumbs, [crumbs]);
 
   return (
     <div className="appShell">
       <SidebarDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)}>
         <AuthMenu />
       </SidebarDrawer>
-      <header className="topbar">
-        <div className="topbarInner topbarInnerSingleMenu">
-          <button
-            type="button"
-            className="btnGhost topbarMenuBtn"
-            aria-label="Ouvrir le menu"
-            title="Menu"
-            onClick={() => setSidebarOpen(true)}
-          >
-            ☰
-          </button>
 
-          <div className="topbarTitleCenter" aria-label="Titre">
-            {pathname?.startsWith("/dashboard") ? (
-              <DashboardViewSelector />
-            ) : (
-              <div className="topbarTitle">{mobileTitle}</div>
-            )}
-          </div>
-        </div>
-      </header>
+      {/* Floating menu (bottom-left). During the onboarding wizard it becomes an "X" to quit. */}
+      <FloatingMenuButton
+        mode={isWizard ? "quit" : "menu"}
+        onClick={() => {
+          if (isWizard) {
+            window.dispatchEvent(new CustomEvent("budget:wizard:quit"));
+            return;
+          }
+          setSidebarOpen(true);
+        }}
+      />
 
       <main className="main">
         {/* Breadcrumbs shown on desktop for every page */}
-        <div className="breadcrumbsDesktopOnly">
-          <Breadcrumbs />
-        </div>
+        {!isWizard ? (
+          <div className="breadcrumbsDesktopOnly">
+            <Breadcrumbs />
+          </div>
+        ) : null}
         <div
           key={pathname ?? "__root"}
           className={`pageTransition pageTransition-${navDir} ${pathname?.startsWith("/dashboard") ? "pageTransition-noAnim" : ""}`}
@@ -141,10 +126,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-
-      <nav className="bottomNav" aria-label="Navigation principale">
-        <BottomNav />
-      </nav>
     </div>
   );
 }

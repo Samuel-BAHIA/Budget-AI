@@ -8,6 +8,7 @@ export default function DashboardPostsPage() {
       mode="posts"
       pageTitle="Simplifiée — Budget"
       showExpenseColumnReorder={false}
+      showDashboardTabs
     />
   );
 }

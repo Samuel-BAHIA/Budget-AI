@@ -6,7 +6,6 @@ Ce fichier liste les erreurs qui ont deja casse le projet, avec le "pourquoi".
 
 - Symptome: stack minifiee avec beaucoup de frames React (`ol/or/...`) et crash dans le bundle layout.
 - Cause observee: `usePathname()` utilise sans fallback dans un composant toujours monte du layout.
-- Correctif applique: `components/nav/BottomNav.tsx` force `const pathname = usePathname() ?? ""`.
 
 Regle:
 - Quand tu utilises `usePathname()`, prevois toujours une fallback (`?? ""` ou `?? "/"`) avant `startsWith`.

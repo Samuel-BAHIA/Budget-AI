@@ -10,6 +10,7 @@ export default function DashboardTypePage() {
       postsPrimaryColumn="type"
       pageTitle="Simplifiée — Budget"
       showExpenseColumnReorder={false}
+      showDashboardTabs
     />
   );
 }

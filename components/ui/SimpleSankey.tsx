@@ -552,7 +552,7 @@ export default function SimpleSankey(props: {
 
   const [tapInfo, setTapInfo] = useState<null | { title: string; detail: string }>(null);
 
-  // Mobile: instead of a popup card, show a bottom sheet ("languette") above the bottom nav.
+  // Mobile: instead of a popup card, show a bottom sheet ("languette").
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetPx, setSheetPx] = useState<number>(64); // current sheet height (collapsed by default)
   const dragRef = useRef<{
@@ -762,45 +762,15 @@ export default function SimpleSankey(props: {
                   <stop offset="0%" stopColor="#1f9d55" stopOpacity={0.95} />
                   <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.95} />
                 </linearGradient>
+
+                {/* Subtle depth for nodes (modern "card" feel) */}
+                <filter id="sankeyNodeShadow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="rgba(0,0,0,0.18)" />
+                </filter>
+                <filter id="sankeyNodeShadowHover" x="-40%" y="-40%" width="180%" height="180%">
+                  <feDropShadow dx="0" dy="12" stdDeviation="12" floodColor="rgba(0,0,0,0.22)" />
+                </filter>
               </defs>
-
-              {/*
-                DEBUG VISUAL: paint full-height stage bands so it's obvious what the SVG considers
-                the "column area" versus the logical node heights (e.g. the green TOTAL node).
-                This helps diagnose "why doesn't this node stretch full height?" questions.
-              */}
-              <g>
-                {stageBounds.map((b) => {
-                  const kind = stageKindOf(b.stage);
-                  const fill =
-                    kind === "revenue"
-                      ? "rgba(34, 197, 94, 0.08)"
-                      : kind === "saving"
-                        ? "rgba(59, 130, 246, 0.08)"
-                        : "rgba(239, 68, 68, 0.07)";
-
-                  const stroke =
-                    kind === "revenue"
-                      ? "rgba(34, 197, 94, 0.35)"
-                      : kind === "saving"
-                        ? "rgba(59, 130, 246, 0.35)"
-                        : "rgba(239, 68, 68, 0.30)";
-
-                  return (
-                    <rect
-                      key={`stage-band-${b.stage}`}
-                      x={b.x0}
-                      y={0}
-                      width={Math.max(0, b.x1 - b.x0)}
-                      height={finalHeight}
-                      fill={fill}
-                      stroke={stroke}
-                      strokeDasharray="6 6"
-                      strokeWidth={1}
-                    />
-                  );
-                })}
-              </g>
 
           {/* Titles (drawn inside the SVG to avoid duplicate header rows) */}
           <g>
@@ -896,33 +866,70 @@ export default function SimpleSankey(props: {
                 style={{ cursor: props.onNodeClick ? "pointer" : "default" }}
                 opacity={dim ? 0.35 : 1}
               >
-                <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={6} fill="transparent" stroke={fill} strokeWidth={2} />
+                {/* Modern filled node with a crisp outline */}
+                <rect
+                  x={n.x}
+                  y={n.y}
+                  width={n.w}
+                  height={n.h}
+                  rx={10}
+                  fill={fill}
+                  opacity={0.92}
+                  filter={isHovered ? "url(#sankeyNodeShadowHover)" : "url(#sankeyNodeShadow)"}
+                />
+                <rect
+                  x={n.x}
+                  y={n.y}
+                  width={n.w}
+                  height={n.h}
+                  rx={10}
+                  fill="none"
+                  stroke="rgba(255,255,255,0.55)"
+                  strokeWidth={1.5}
+                  opacity={0.9}
+                />
 
                 {/* Labels */}
                 <text
                   x={n.stage === maxStage ? n.x - 8 : n.x + n.w + 8}
                   y={n.y + Math.min(n.h - 6, 18)}
-                  fontSize={isNarrow ? 13 : 12}
-                  fontWeight={800}
+                  fontSize={isNarrow ? 14 : 12}
+                  fontWeight={850}
                   textAnchor={n.stage === maxStage ? "end" : "start"}
-                  fill="rgba(0,0,0,0.72)"
+                  fill="rgba(0,0,0,0.78)"
+                  style={{
+                    paintOrder: "stroke",
+                    stroke: "rgba(255,255,255,0.92)",
+                    strokeWidth: 3,
+                    strokeLinejoin: "round",
+                    textShadow: "0 1px 0 rgba(0,0,0,0.10)",
+                  }}
                 >
                   {n.label}
                 </text>
                 <text
                   x={n.stage === maxStage ? n.x - 8 : n.x + n.w + 8}
                   y={n.y + Math.min(n.h - 6, 34)}
-                  fontSize={isNarrow ? 12 : 11}
+                  fontSize={isNarrow ? 13 : 11}
                   fontWeight={700}
                   textAnchor={n.stage === maxStage ? "end" : "start"}
-                  fill="rgba(0,0,0,0.45)"
+                  fill="rgba(0,0,0,0.55)" style={{ paintOrder: "stroke", stroke: "rgba(255,255,255,0.92)", strokeWidth: 3, strokeLinejoin: "round" }}
                 >
                   {formatValue(n.value)}
                 </text>
 
-                {/* Subtle outline when hovered */}
+                {/* Subtle highlight when hovered */}
                 {isHovered ? (
-                  <rect x={n.x - 1} y={n.y - 1} width={n.w + 2} height={n.h + 2} rx={7} fill="none" stroke="rgba(0,0,0,0.18)" />
+                  <rect
+                    x={n.x - 2}
+                    y={n.y - 2}
+                    width={n.w + 4}
+                    height={n.h + 4}
+                    rx={12}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.55)"
+                    strokeWidth={2}
+                  />
                 ) : null}
               </g>
             );
@@ -973,8 +980,7 @@ export default function SimpleSankey(props: {
             position: "fixed",
             left: 12,
             right: 12,
-            // sit above the bottom nav
-            bottom: "var(--bottomnav-h)",
+            bottom: "calc(12px + env(safe-area-inset-bottom))",
             zIndex: 120,
             height: sheetPx,
             maxHeight: sheetMax,

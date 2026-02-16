@@ -9,6 +9,7 @@ export default function DashboardPersonPage() {
       pageTitle="Utilisateur — Budget"
       showExpenseColumnReorder={false}
       forceRevenueOwnersColumn
+      showDashboardTabs
     />
   );
 }

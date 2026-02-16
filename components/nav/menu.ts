@@ -24,10 +24,6 @@ export type MenuGroup = {
  * - Le menu "Dashboard" ouvre l'accès à Sankey.
  */
 
-export const bottomNavTabs: MenuNavItem[] = [
-  { href: "/", label: "Accueil", icon: "⌂" },
-  { href: "/dashboard", label: "Budget", icon: "📊" },
-];
 
 export const sidebarNavGroups: MenuGroup[] = [
   {
