@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import BottomNav from "@/components/nav/BottomNav";
 import Breadcrumbs, { useBreadcrumbCrumbs } from "@/components/ui/Breadcrumbs";
 import DashboardViewSelector from "@/components/nav/DashboardViewSelector";
+import AuthMenu from "@/components/auth/AuthMenu";
 import SidebarDrawer from "@/components/nav/SidebarDrawer";
 // Sidebar removed in web mode; keep layout simple.
 
@@ -97,12 +99,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (pathname?.startsWith("/depenses")) return "Dépenses";
     // Dashboard title is handled by the "Vue" selector in the topbar.
     if (pathname?.startsWith("/dashboard")) return "";
-    return crumbs.length ? crumbs[crumbs.length - 1].label : "Foyers";
+    return crumbs.length ? crumbs[crumbs.length - 1].label : "Accueil";
   }, [pathname, crumbs]);
 
   return (
     <div className="appShell">
-      <SidebarDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <SidebarDrawer open={sidebarOpen} onClose={() => setSidebarOpen(false)}>
+        <AuthMenu />
+      </SidebarDrawer>
       <header className="topbar">
         <div className="topbarInner topbarInnerSingleMenu">
           <button
@@ -137,6 +141,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      <nav className="bottomNav" aria-label="Navigation principale">
+        <BottomNav />
+      </nav>
     </div>
   );
 }
