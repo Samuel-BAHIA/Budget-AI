@@ -42,7 +42,7 @@
  * ============================================================================
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useUsers } from "@/components/user/UserProvider";
@@ -1379,7 +1379,11 @@ const autoAdvanceToNextStep = (afterStateUpdate?: () => void) => {
   }, AUTO_ADVANCE_MS);
 };
 
-const autoAdvanceToSubStep = (setSubStep: (v: number) => void, v: number, afterStateUpdate?: () => void) => {
+const autoAdvanceToSubStep = <T extends number>(
+  setSubStep: Dispatch<SetStateAction<T>>,
+  v: T,
+  afterStateUpdate?: () => void
+) => {
   afterStateUpdate?.();
   window.setTimeout(() => setSubStep(v), AUTO_ADVANCE_MS);
 };
