@@ -112,7 +112,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         }}
       />
 
-      <main className="main">
+      <main className={`main${isWizard ? " mainIsWizard" : ""}`}>
         {/* Breadcrumbs shown on desktop for every page */}
         {!isWizard ? (
           <div className="breadcrumbsDesktopOnly">

@@ -100,6 +100,27 @@ function toMonthly(amount: number, period?: "month" | "year") {
   return period === "year" ? a / 12 : a;
 }
 
+function housingExpenseSuggestions(kind: string | undefined, surface: number | undefined) {
+  const sqm = Math.max(0, Number(surface) || 0);
+  const normalizedKind = String(kind ?? "").toLowerCase();
+  const isHouse = normalizedKind === "maison";
+  const isStudio = normalizedKind === "studio";
+
+  if (!sqm) return null;
+
+  return {
+    chargesCopro: isHouse ? 0 : Math.round(sqm * (isStudio ? 1.6 : 2.2)),
+    charges: Math.round(sqm * (isHouse ? 0.8 : isStudio ? 1.6 : 2.1)),
+    eau: Math.round(10 + sqm * 0.35),
+    elec: Math.round(18 + sqm * (isHouse ? 0.95 : 0.75)),
+    gaz: Math.round(isHouse ? 12 + sqm * 0.65 : sqm * 0.18),
+    internet: 35,
+    assurance: Math.round(8 + sqm * (isHouse ? 0.12 : 0.08)),
+    mensualiteEmprunt: Math.round(sqm * (isHouse ? 12 : isStudio ? 16 : 14)),
+    assuranceEmprunt: Math.round(6 + sqm * 0.1),
+  };
+}
+
 
 
 // === PURE HELPERS (input -> output) =====================================
@@ -111,6 +132,46 @@ function toMonthly(amount: number, period?: "month" | "year") {
  */
 function fmtMoney(n: number) {
   return formatEUR(Number(n) || 0);
+}
+
+const FRENCH_TAX_BRACKETS_2025 = [
+  { upTo: 11497, rate: 0 },
+  { upTo: 29315, rate: 0.11 },
+  { upTo: 83823, rate: 0.3 },
+  { upTo: 180294, rate: 0.41 },
+  { upTo: Number.POSITIVE_INFINITY, rate: 0.45 },
+] as const;
+
+function estimateFrenchIncomeTax(annualIncome: number, parts = 1) {
+  const safeIncome = Math.max(0, Number(annualIncome) || 0);
+  const safeParts = Math.max(1, Number(parts) || 1);
+  const taxablePerPart = safeIncome / safeParts;
+
+  let lower = 0;
+  let taxPerPart = 0;
+  let marginalRate = 0;
+
+  for (const bracket of FRENCH_TAX_BRACKETS_2025) {
+    if (taxablePerPart > lower) {
+      const taxableSlice = Math.min(taxablePerPart, bracket.upTo) - lower;
+      taxPerPart += taxableSlice * bracket.rate;
+      marginalRate = bracket.rate;
+    }
+    if (taxablePerPart <= bracket.upTo) break;
+    lower = bracket.upTo;
+  }
+
+  const annualTax = taxPerPart * safeParts;
+  const averageRate = safeIncome > 0 ? annualTax / safeIncome : 0;
+
+  return {
+    annualIncome: safeIncome,
+    parts: safeParts,
+    annualTax,
+    monthlyTax: annualTax / 12,
+    marginalRate,
+    averageRate,
+  };
 }
 
 function stepTitle(step: Step) {
@@ -128,11 +189,11 @@ function stepTitle(step: Step) {
     case "owner":
       return "6/ Propriété";
     case "owners":
-      return "Mes biens";
+      return "4/ Mes biens";
     case "cars":
       return "6/ Mobilité";
     case "daily":
-      return "7/ Dépenses";
+      return "7/ Autres dépenses";
     case "summary":
       return "Résumé";
   }
@@ -142,11 +203,10 @@ const WIZ_STEPS: Array<{ step: Step; label: string }> = [
   { step: "people", label: "Foyer" },
   { step: "coupleStatus", label: "Couple" },
   { step: "incomes", label: "Revenus" },
-  { step: "situation", label: "Immobilier" },
-  { step: "owners", label: "Mes biens" }, // visible only if "Oui" à l'étape Immobilier
+  { step: "owners", label: "Mes biens" },
   { step: "rentals", label: "Résidence" },
   { step: "cars", label: "Mobilité" },
-  { step: "daily", label: "Dépenses" },
+  { step: "daily", label: "Autres dépenses" },
   { step: "summary", label: "Résumé" },
 ];
 
@@ -168,8 +228,20 @@ type Period = "month" | "year";
  */
 function Section(props: { title: string; children: any }) {
   return (
-    <div style={{ border: "1px solid rgba(0,0,0,0.10)", borderRadius: 14, padding: 12, display: "grid", gap: 10 }}>
-      <div style={{ fontWeight: 900 }}>{props.title}</div>
+    <div
+      style={{
+        border: "1px solid rgba(59,130,246,0.20)",
+        borderRadius: 20,
+        padding: 14,
+        display: "grid",
+        gap: 10,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)), linear-gradient(135deg, rgba(59,130,246,0.16), rgba(139,92,246,0.10))",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.24), 0 24px 52px rgba(59,130,246,0.14), 0 10px 24px rgba(11,18,32,0.06)",
+      }}
+    >
+      <div style={{ fontWeight: 900, color: "rgba(11,18,32,0.92)" }}>{props.title}</div>
       {props.children}
     </div>
   );
@@ -278,6 +350,269 @@ function ChoiceCard(props: {
       </div>
       <div className="wizChoiceCheck" aria-hidden="true">{props.selected ? "✓" : ""}</div>
     </button>
+  );
+}
+
+function WizardSectionHeader(props: {
+  title: string;
+  subtitle?: string;
+  total?: string;
+  totalLabel?: string;
+  totalClassName?: string;
+  totalNote?: string;
+}) {
+  return (
+    <div className="wizardSectionTop">
+      <div style={{ display: "grid", gap: 4 }}>
+        <div className="wizQuestion" style={{ margin: 0 }}>{props.title}</div>
+        {props.subtitle ? (
+          <div className="muted" style={{ fontSize: 13 }}>{props.subtitle}</div>
+        ) : null}
+      </div>
+
+      {props.total ? (
+        <div className={`wizardMetricChip ${props.totalClassName ?? ""}`.trim()} title="Total mensuel estimé">
+          <span className="wizardMetricChipLabel">{props.totalLabel ?? "Total"}</span>
+          <span className="wizardMetricChipValue">{props.total}</span>
+          {props.totalNote ? <span className="wizardMetricChipNote">{props.totalNote}</span> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function WizardEmptyState(props: {
+  icon: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="card wizardEmptyState">
+      <div className="wizardEmptyIcon" aria-hidden="true">{props.icon}</div>
+      <div style={{ fontWeight: 800 }}>{props.title}</div>
+      <div className="muted" style={{ fontSize: 13 }}>{props.subtitle}</div>
+    </div>
+  );
+}
+
+function WizardAddButton(props: {
+  label: string;
+  onClick: () => void;
+  stacked?: boolean;
+}) {
+  return (
+    <button
+      className={`btnPrimary wizardAddBtn ${props.stacked ? "wizardAddBtnStacked" : ""}`.trim()}
+      onClick={props.onClick}
+    >
+      <span className={props.stacked ? "wizardAddBtnIcon" : ""} aria-hidden="true">＋</span>
+      <span>{props.label}</span>
+    </button>
+  );
+}
+
+function WizardFormActions(props: {
+  leftLabel: string;
+  onLeft: () => void;
+  rightLabel: string;
+  onRight: () => void;
+  leftClassName?: string;
+  rightClassName?: string;
+  leftWidth?: number;
+  rightWidth?: number;
+}) {
+  return (
+    <div className="wizardFormActions">
+      <button
+        className={`btnSecondary ${props.leftClassName ?? "wizardSecondaryBtn"}`.trim()}
+        style={{ width: props.leftWidth ?? 140 }}
+        onClick={props.onLeft}
+      >
+        {props.leftLabel}
+      </button>
+      <button
+        className={`btnSecondary ${props.rightClassName ?? "wizardSecondaryBtn"}`.trim()}
+        style={{ width: props.rightWidth ?? 160 }}
+        onClick={props.onRight}
+      >
+        {props.rightLabel}
+      </button>
+    </div>
+  );
+}
+
+function WizardOccupantPicker(props: {
+  value?: string;
+  people: Array<{ id: string; name?: string }>;
+  onChange: (value: string) => void;
+  commonLabel?: string;
+}) {
+  const fallbackValue = props.value ?? (props.people.length > 1 ? "commun" : props.people[0]?.id ?? "commun");
+  const options = [
+    ...props.people.slice(0, 2).map((p, index) => ({
+      value: p.id,
+      icon: "👤",
+      label: p.name?.trim() || `User ${index + 1}`,
+      short: (p.name?.trim()?.split(/\s+/)?.[0] ?? `User ${index + 1}`),
+    })),
+    ...(props.people.length > 1
+      ? [{ value: "commun", icon: "👥", label: props.commonLabel ?? "Commun", short: "Tous" }]
+      : []),
+  ];
+
+  return (
+    <div className="wizardOccupantPicker">
+      {options.map((option) => {
+        const active = fallbackValue === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`wizardOccupantBtn ${active ? "isActive" : ""}`.trim()}
+            onClick={() => props.onChange(option.value)}
+            title={option.label}
+            aria-pressed={active}
+          >
+            <span className="wizardOccupantBtnIcon" aria-hidden="true">{option.icon}</span>
+            <span className="wizardOccupantBtnText">{option.short}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CityAutocompleteField(props: {
+  label: string;
+  value?: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+  onSelect?: (city: { name: string; code?: string; postalCode?: string; departement?: string }) => void;
+}) {
+  const [results, setResults] = useState<Array<{ key: string; label: string; value: string; code?: string; postalCode?: string; departement?: string }>>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const query = String(props.value ?? "").trim();
+  const deferredQuery = query;
+
+  useEffect(() => {
+    const normalizedQuery = deferredQuery.replace(/\s+/g, "");
+    const isPostalSearch = /^\d{2,5}$/.test(normalizedQuery);
+    const hasEnoughChars = isPostalSearch ? normalizedQuery.length >= 2 : deferredQuery.length >= 2;
+
+    if (!hasEnoughChars) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const run = async () => {
+      try {
+        setLoading(true);
+        if (isPostalSearch && normalizedQuery.length < 5) {
+          const res = await fetch(
+            `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(normalizedQuery)}&type=municipality&autocomplete=1&limit=8`,
+            { signal: controller.signal }
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = (await res.json()) as { features?: Array<any> };
+          setResults(
+            (data.features ?? []).map((feature) => ({
+              key: String(feature.properties?.citycode ?? feature.properties?.id ?? feature.properties?.city ?? feature.properties?.label),
+              value: String(feature.properties?.city ?? feature.properties?.name ?? ""),
+              code: feature.properties?.citycode ? String(feature.properties.citycode) : undefined,
+              postalCode: feature.properties?.postcode ? String(feature.properties.postcode) : undefined,
+              departement: feature.properties?.context ? String(feature.properties.context).split(",")[0]?.trim() : undefined,
+              label:
+                `${feature.properties?.city ?? feature.properties?.name ?? ""}` +
+                `${feature.properties?.postcode ? ` • ${feature.properties.postcode}` : ""}` +
+                `${feature.properties?.context ? ` • ${String(feature.properties.context).split(",")[0]?.trim()}` : ""}`,
+            }))
+          );
+        } else {
+          const url =
+            `https://geo.api.gouv.fr/communes?${isPostalSearch ? `codePostal=${encodeURIComponent(normalizedQuery)}` : `nom=${encodeURIComponent(deferredQuery)}`}` +
+            `&boost=population&limit=8&fields=nom,code,departement,codesPostaux`;
+          const res = await fetch(url, { signal: controller.signal });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = (await res.json()) as Array<any>;
+          setResults(
+            data.map((item) => ({
+              key: String(item.code ?? item.nom),
+              value: String(item.nom ?? ""),
+              code: item.code ? String(item.code) : undefined,
+              postalCode: Array.isArray(item.codesPostaux) && item.codesPostaux[0] ? String(item.codesPostaux[0]) : undefined,
+              departement: item.departement?.nom ? String(item.departement.nom) : undefined,
+              label:
+                `${item.nom}` +
+                `${Array.isArray(item.codesPostaux) && item.codesPostaux[0] ? ` • ${item.codesPostaux[0]}` : ""}` +
+                `${item.departement?.nom ? ` • ${item.departement.nom}` : ""}`,
+            }))
+          );
+        }
+      } catch (err: any) {
+        if (err?.name !== "AbortError") {
+          setResults([]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const timeout = window.setTimeout(run, 180);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [deferredQuery]);
+
+  return (
+    <div className="cityAutocompleteField">
+      <label style={{ display: "grid", gap: 6 }}>
+        <span className="muted" style={{ fontSize: 12 }}>{props.label}</span>
+        <input
+          className="input"
+          value={props.value ?? ""}
+          onChange={(e) => {
+            props.onChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          placeholder={props.placeholder ?? "Ex: Saint-Denis"}
+          autoComplete="off"
+        />
+      </label>
+
+      {open && query.length >= 2 ? (
+        <div className="cityAutocompleteMenu">
+          {loading ? <div className="cityAutocompleteEmpty">Recherche…</div> : null}
+          {!loading && results.length === 0 ? <div className="cityAutocompleteEmpty">Aucune commune trouvée</div> : null}
+          {!loading &&
+            results.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className="cityAutocompleteItem"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  props.onChange(item.value);
+                  props.onSelect?.({
+                    name: item.value,
+                    code: item.code,
+                    postalCode: item.postalCode,
+                    departement: item.departement,
+                  });
+                  setOpen(false);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -398,6 +733,26 @@ function StepIcon(props: { step: Step }) {
   }
 }
 
+function ownerKindIcon(kind?: string) {
+  switch (String(kind ?? "").toLowerCase()) {
+    case "maison":
+      return "🏠";
+    case "studio":
+      return "🛏️";
+    case "appartement":
+      return "🏢";
+    default:
+      return "🏘️";
+  }
+}
+
+function vehicleIcon(label?: string) {
+  const v = String(label ?? "").toLowerCase();
+  if (v.includes("moto") || v.includes("scooter")) return "🏍️";
+  if (v.includes("velo") || v.includes("vélo")) return "🚲";
+  return "🚗";
+}
+
 /**
  * CurrencyField
  * A pragmatic (safe) money input: user types numbers, we store number,
@@ -495,6 +850,8 @@ function MoneyRow(props: {
   onChange: (v: string) => void;
   disabled?: boolean;
   hint?: string;
+  suggestion?: number;
+  onApplySuggestion?: () => void;
 }) {
   return (
     <div style={{ display: "grid", gap: 4 }}>
@@ -517,6 +874,12 @@ function MoneyRow(props: {
         <div className="muted" style={{ fontSize: 11 }}>
           {props.hint}
         </div>
+      ) : null}
+
+      {props.suggestion && props.suggestion > 0 && props.onApplySuggestion ? (
+        <button type="button" className="moneySuggestionBtn" onClick={props.onApplySuggestion}>
+          Suggéré: {fmtMoney(props.suggestion)}/mois
+        </button>
       ) : null}
     </div>
   );
@@ -623,7 +986,7 @@ function BudgetSection(props: {
   hidden?: boolean; // optional (type-only)
 
   // Preferred API (used throughout the wizard)
-  base?: Array<{ key: string; label: string; hint?: string; disabled?: boolean }>;
+  base?: Array<{ key: string; label: string; hint?: string; disabled?: boolean; suggestion?: number; onApplySuggestion?: () => void }>;
   values?: any;
   onValue?: (key: string, val: string) => void;
 
@@ -635,6 +998,8 @@ function BudgetSection(props: {
     onChange: (v: string) => void;
     hint?: string;
     disabled?: boolean;
+    suggestion?: number;
+    onApplySuggestion?: () => void;
   }>;
 
   // Optional add button for fixed fields
@@ -667,6 +1032,8 @@ function BudgetSection(props: {
       onChange: (v: string) => props.onValue?.(b.key, v),
       hint: b.hint,
       disabled: b.disabled,
+      suggestion: (b as any).suggestion,
+      onApplySuggestion: (b as any).onApplySuggestion,
     }));
 
   const customLines = (props.custom?.items ?? props.custom?.lines ?? []) as Array<any>;
@@ -687,50 +1054,67 @@ function BudgetSection(props: {
   const renderCustomItem = (l: any) => {
     const isNaming = l.stage === "name";
     return (
-      <div key={l.id} style={{ display: "grid", gridTemplateRows: "18px auto", gap: 6, position: "relative" }}>
-        <div style={{ height: 18, display: "flex", alignItems: "center" }}>
+      <div key={l.id} style={{ display: "grid", gap: 4, minWidth: 0, width: "min(100%, 160px)", justifySelf: "start" }}>
+        <div style={{ minHeight: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           {isNaming ? (
-            <input
-              className="customNameInput"
-              value={l.name ?? ""}
-              maxLength={12}
-              placeholder="Nom"
-              autoFocus
-              onChange={(e) => updateCustom(l.id, { name: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 8, width: "100%" }}>
+              <input
+                className="customNameInput"
+                value={l.name ?? ""}
+                maxLength={18}
+                placeholder="Nom"
+                autoFocus
+                onChange={(e) => updateCustom(l.id, { name: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const name = String(l.name ?? "").trim();
+                    if (name) updateCustom(l.id, { name, stage: "full" });
+                  }
+                  if (e.key === "Escape") removeCustom(l.id);
+                }}
+                style={{ width: "100%" }}
+              />
+              <button
+                className="customIconBtn"
+                onClick={() => {
                   const name = String(l.name ?? "").trim();
                   if (name) updateCustom(l.id, { name, stage: "full" });
-                }
-                if (e.key === "Escape") removeCustom(l.id);
-              }}
-              style={{ width: "100%" }}
-            />
+                }}
+                aria-label="Valider"
+                title="Valider"
+              >
+                ✓
+              </button>
+              <button className="customIconBtn danger" onClick={() => removeCustom(l.id)} aria-label="Supprimer" title="Supprimer">
+                ×
+              </button>
+            </div>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>{l.name}</div>
+            <>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {l.name}
+              </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button className="customIconBtn" onClick={() => updateCustom(l.id, { stage: "name" })} aria-label="Renommer" title="Renommer">
-                  ✏️
-                </button>
                 <button className="customIconBtn danger" onClick={() => removeCustom(l.id)} aria-label="Supprimer" title="Supprimer">
                   ×
                 </button>
               </div>
-            </div>
+            </>
           )}
         </div>
 
-        <input
-          className="moneyInput"
-          type="decimal"
-          maxLength={7}
-          value={l.amount ?? ""}
-          onChange={(e) => updateCustom(l.id, { amount: e.target.value })}
-          placeholder="0"
-          disabled={isNaming}
-          style={{ opacity: isNaming ? 0.55 : 1 }}
-        />
+        {!isNaming ? (
+          <input
+            className="input moneyInputCompact"
+            inputMode="decimal"
+            maxLength={7}
+            value={l.amount ?? ""}
+            onChange={(e) => updateCustom(l.id, { amount: e.target.value })}
+            placeholder="0"
+          />
+        ) : (
+          <div style={{ height: 0 }} />
+        )}
       </div>
     );
   };
@@ -739,7 +1123,16 @@ function BudgetSection(props: {
     <Section title={props.title + (titleSuffix ? " " + titleSuffix : "")}>
       <div style={{ display: "grid", gridTemplateColumns: gridCols, gap: 12, alignItems: "end", justifyContent: "start" }}>
         {computedFields.map((f) => (
-          <MoneyRow key={f.key} label={f.label} value={f.value} onChange={f.onChange} disabled={f.disabled} hint={f.hint} />
+          <MoneyRow
+            key={f.key}
+            label={f.label}
+            value={f.value}
+            onChange={f.onChange}
+            disabled={f.disabled}
+            hint={f.hint}
+            suggestion={f.suggestion}
+            onApplySuggestion={f.onApplySuggestion}
+          />
         ))}
 
         {customLines.map(renderCustomItem)}
@@ -839,6 +1232,7 @@ export default function OnboardingWizard() {
 
 
 // Sub-steps to keep "one question per screen" while reusing existing step keys.
+const [ownersSubStep, setOwnersSubStep] = useState<1 | 2>(1); // 1: question, 2: list/form
 const [rentalsSubStep, setRentalsSubStep] = useState<1 | 2>(1); // 1: question, 2: list/form
 const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: costs form
 
@@ -850,6 +1244,7 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
   // Progress helpers (used to gray out skipped / not-yet-passed steps in the summary).
   const [completedSteps, setCompletedSteps] = useState<Step[]>([]);
   const [skippedSteps, setSkippedSteps] = useState<Step[]>([]);
+  const [visitedSteps, setVisitedSteps] = useState<Step[]>(["people"]);
 
   const [quitOpen, setQuitOpen] = useState(false);
 
@@ -870,12 +1265,16 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
   useEffect(() => {
     const prev = prevStepRef.current;
     if (prev !== step) {
-      const order: Step[] = ["people","coupleStatus","incomes","situation","owners","rentals","cars","daily","summary"];
+      const order: Step[] = ["people","coupleStatus","incomes","owners","rentals","cars","daily","summary"];
       const prevIdx = order.indexOf(prev);
       const nextIdx = order.indexOf(step);
       setStepAnimDir(nextIdx >= prevIdx ? "next" : "prev");
       prevStepRef.current = step;
     }
+  }, [step]);
+
+  useEffect(() => {
+    setVisitedSteps((prev) => (prev.includes(step) ? prev : [...prev, step]));
   }, [step]);
 
 
@@ -933,9 +1332,10 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
   // When entering a step that contains an internal sub-flow, sync the sub-step with existing answers.
   // NOTE: Must be declared after isTenant/hasCar initializations to avoid TDZ runtime errors.
   useEffect(() => {
+    if (step === "owners") setOwnersSubStep(isOwner === true ? 2 : 1);
     if (step === "rentals") setRentalsSubStep(isTenant === true ? 2 : 1);
     if (step === "cars") setCarsSubStep(hasCar === true ? 2 : 1);
-  }, [step, isTenant, hasCar]);
+  }, [step, isOwner, isTenant, hasCar]);
   const [cars, setCars] = useState<CarRow[]>([]);
   const [activeCarId, setActiveCarId] = useState<string | null>(null);
   const [carModalStep, setCarModalStep] = useState<0 | 1 | 2>(0);
@@ -976,6 +1376,18 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
   }, [activePeople, incomes]);
 
   const totalGlobal = useMemo(() => Object.values(totalsByPerson).reduce((a, b) => a + b, 0), [totalsByPerson]);
+  const taxByPerson = useMemo(() => {
+    const by: Record<string, ReturnType<typeof estimateFrenchIncomeTax>> = {};
+    for (const p of activePeople) {
+      by[p.id] = estimateFrenchIncomeTax((totalsByPerson[p.id] ?? 0) * 12, 1);
+    }
+    return by;
+  }, [activePeople, totalsByPerson]);
+  const isJointTaxHousehold = householdType === "couple" && activePeople.length >= 2 && (coupleStatus === "marie" || coupleStatus === "pacs");
+  const householdTaxEstimate = useMemo(
+    () => estimateFrenchIncomeTax(totalGlobal * 12, isJointTaxHousehold ? 2 : 1),
+    [totalGlobal, isJointTaxHousehold]
+  );
 
   const persistProfile = (extra?: Partial<Parameters<typeof writeFoyerProfile>[0]>) => {
     if (!foyerId) return;
@@ -1098,6 +1510,16 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
       const amount = Number((daily as any)?.[k] ?? 0);
       if (amount) variables.push({ id: `wiz:daily:${k}`, label, amount });
     }
+    for (const line of ((daily as any)?.customVieCourante ?? []) as any[]) {
+      const amount = Number(line?.amount ?? 0);
+      if (!amount) continue;
+      variables.push({ id: `wiz:daily:vc:${line.id ?? "x"}`, label: String(line?.name ?? "").trim() || "Autre", amount });
+    }
+    for (const line of ((daily as any)?.customLoisirs ?? []) as any[]) {
+      const amount = Number(line?.amount ?? 0);
+      if (!amount) continue;
+      variables.push({ id: `wiz:daily:ld:${line.id ?? "x"}`, label: String(line?.name ?? "").trim() || "Autre", amount });
+    }
 
     // Owners => expenses + potential revenus
     for (let i = 0; i < (owners ?? []).length; i++) {
@@ -1122,6 +1544,8 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
       pushFix("taxeFonciere", "Taxe foncière", toMonthly(o.taxeFonciere ?? 0, "year"));
       pushFix("impotRevenu", "Impôt revenu", toMonthly(o.impotRevenu ?? 0, "year"));
       pushFix("chargesCopro", "Charges copro", (o.chargesCopro ?? o.charges));
+      pushFix("mensualiteEmprunt", "Mensualité emprunt", o.mensualiteEmprunt);
+      pushFix("assuranceEmprunt", "Assurance emprunt", o.assuranceEmprunt);
       pushFix("internet", "Internet", o.internet);
       pushFix("assurance", "Assurance", o.assurance);
 
@@ -1212,13 +1636,12 @@ const [carsSubStep, setCarsSubStep] = useState<1 | 2>(1); // 1: question, 2: cos
   const visibleSteps = useMemo(() => {
   // Steps shown in the sidebar and used for Next/Back navigation.
   // - coupleStatus only matters when the household is a couple
-  // - owners (Mes biens) only matters when isOwner === true
+  // - situation is folded into "owners" so the ownership question is asked there
   const showCoupleStatus = householdType === "couple";
-  const showOwners = isOwner === true;
 
   return WIZ_STEPS.filter((s) => {
     if (s.step === "coupleStatus") return showCoupleStatus;
-    if (s.step === "owners") return showOwners;
+    if (s.step === "situation") return false;
     return true;
   });
 }, [householdType, isOwner]);
@@ -1312,9 +1735,10 @@ const getPrevVisibleStep = (): Step | null => {
 
 const resetStepData = (s: Step) => {
   // Reset only the local wizard state (doesn't touch DB stores).
-  if (s === "situation") {
+  if (s === "owners" || s === "situation") {
     setIsOwner(false);
     setOwners([]);
+    setOwnersSubStep(1);
     setActiveAssetId(null);
     setOwnerModalStep(0);
     setOwnerEditingId(null);
@@ -1357,6 +1781,7 @@ const resetStepData = (s: Step) => {
 const goPrev = () => {
   // Handle internal sub-steps first
   if (step === "people" && peopleSubStep === 2) return setPeopleSubStep(1);
+  if (step === "owners" && ownersSubStep === 2) return setOwnersSubStep(1);
   if (step === "rentals" && rentalsSubStep === 2) return setRentalsSubStep(1);
   if (step === "cars" && carsSubStep === 2) return setCarsSubStep(1);
 
@@ -1367,6 +1792,7 @@ const goPrev = () => {
 const goNext = () => {
   // Handle internal sub-steps first
   if (step === "people" && peopleSubStep === 1) return setPeopleSubStep(2);
+  if (step === "owners" && ownersSubStep === 1 && isOwner === true) return setOwnersSubStep(2);
   if (step === "rentals" && rentalsSubStep === 1 && isTenant === true) return setRentalsSubStep(2);
   if (step === "cars" && carsSubStep === 1 && hasCar === true) return setCarsSubStep(2);
 
@@ -1426,12 +1852,14 @@ case "people": {
     <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
       {peopleSubStep === 1 ? (
         <>
-          <div className="wizQuestion">Pour combien de personnes établissons-nous ce budget ?</div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            Une seule question par écran, pour aller vite.
+          <div className="foyerHero">
+            <div className="wizQuestion">Pour combien de personnes établissons-nous ce budget ?</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Une seule question par écran, pour aller vite.
+            </div>
           </div>
 
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className="foyerChoiceGrid">
             <ChoiceCard
               icon="👤"
               title="Une personne"
@@ -1473,62 +1901,83 @@ case "people": {
         </>
       ) : (
         <>
-          <div className="wizQuestion">Enchanté ! Comment devons-nous vous appeler ?</div>
-          <div className="muted" style={{ fontSize: 13 }}>Un prénom suffit.</div>
+          <div className="foyerHero">
+            <div className="wizQuestion">Enchanté ! Comment devons-nous vous appeler ?</div>
+            <div className="muted" style={{ fontSize: 13 }}>Un prénom suffit.</div>
+          </div>
 
-          <div style={{ display: "grid", gap: 12 }}>
-            <label className="min0" style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Votre prénom</span>
-              <input
-                ref={name1Ref}
-                className={`input ${name1.length > 0 && name1.length < 2 ? "inputInvalid" : ""}`}
-                value={draftPeople?.[0]?.name ?? ""}
-                maxLength={20}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  e.preventDefault();
-                  // Couple: Enter on first field moves to the second field.
-                  if (householdType === "couple") {
-                    name2Ref.current?.focus();
-                    return;
-                  }
-                  if (canContinueIdentity) finishPeople();
-                }}
-                onChange={(e) =>
-                  setDraftPeople((prev) => {
-                    const next = [...prev];
-                    next[0] = { ...(next[0] ?? { name: "" }), name: e.target.value };
-                    return next;
-                  })
-                }
-                placeholder="Votre prénom"
-              />
-            </label>
+          <div className="foyerPersonGrid">
+            <div className="foyerPersonCard">
+              <div className="foyerPersonHead">
+                <div className="foyerPersonIcon" aria-hidden="true">👤</div>
+                <div>
+                  <div className="foyerPersonTitle">Vous</div>
+                  <div className="foyerPersonSubtitle">Prénom principal</div>
+                </div>
+              </div>
 
-            {householdType === "couple" ? (
-              <label className="min0" style={{ display: "grid", gap: 6 }}>
-                <span className="muted" style={{ fontSize: 12 }}>Prénom du conjoint</span>
+              <label className="min0 foyerField">
+                <span className="muted" style={{ fontSize: 12 }}>Votre prénom</span>
                 <input
-                  ref={name2Ref}
-                  className={`input ${name2.length > 0 && name2.length < 2 ? "inputInvalid" : ""}`}
-                  value={draftPeople?.[1]?.name ?? ""}
+                  ref={name1Ref}
+                  className={`input ${name1.length > 0 && name1.length < 2 ? "inputInvalid" : ""}`}
+                  value={draftPeople?.[0]?.name ?? ""}
                   maxLength={20}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      if (canContinueIdentity) finishPeople();
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    if (householdType === "couple") {
+                      name2Ref.current?.focus();
+                      return;
                     }
+                    if (canContinueIdentity) finishPeople();
                   }}
                   onChange={(e) =>
                     setDraftPeople((prev) => {
                       const next = [...prev];
-                      next[1] = { ...(next[1] ?? { name: "" }), name: e.target.value };
+                      next[0] = { ...(next[0] ?? { name: "" }), name: e.target.value };
                       return next;
                     })
                   }
-                  placeholder="Prénom du conjoint"
+                  placeholder="Votre prénom"
                 />
               </label>
+            </div>
+
+            {householdType === "couple" ? (
+              <div className="foyerPersonCard">
+                <div className="foyerPersonHead">
+                  <div className="foyerPersonIcon" aria-hidden="true">👥</div>
+                  <div>
+                    <div className="foyerPersonTitle">Conjoint</div>
+                    <div className="foyerPersonSubtitle">Deuxième personne du foyer</div>
+                  </div>
+                </div>
+
+                <label className="min0 foyerField">
+                  <span className="muted" style={{ fontSize: 12 }}>Prénom du conjoint</span>
+                  <input
+                    ref={name2Ref}
+                    className={`input ${name2.length > 0 && name2.length < 2 ? "inputInvalid" : ""}`}
+                    value={draftPeople?.[1]?.name ?? ""}
+                    maxLength={20}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (canContinueIdentity) finishPeople();
+                      }
+                    }}
+                    onChange={(e) =>
+                      setDraftPeople((prev) => {
+                        const next = [...prev];
+                        next[1] = { ...(next[1] ?? { name: "" }), name: e.target.value };
+                        return next;
+                      })
+                    }
+                    placeholder="Prénom du conjoint"
+                  />
+                </label>
+              </div>
             ) : null}
           </div>
 
@@ -1597,19 +2046,20 @@ case "coupleStatus":
       case "incomes":
         return (
           <div className="wizardPanel incomePanel" style={{ display: "grid", gap: 14 }}>
-            <div className="incomeTop">
-              <div style={{ display: "grid", gap: 4 }}>
-                <div className="wizQuestion" style={{ margin: 0 }}>Quels sont vos revenus ?</div>
-                <div className="wizSubQuestion" style={{ margin: 0 }}>Ajoutez vos sources principales (mensuel).</div>
-              </div>
-              <div className="incomeGlobalChip" title="Total mensuel estimé">
-                <span className="incomeGlobalChipLabel">Total</span>
-                <span className="incomeGlobalChipValue">{formatEUR(totalGlobal)}</span>
-              </div>
-            </div>
+            <WizardSectionHeader
+              title="Quels sont vos revenus ?"
+              subtitle="Ajoutez vos sources principales (mensuel)."
+              total={formatEUR(totalGlobal)}
+              totalNote={
+                isJointTaxHousehold
+                  ? `impôt : ${fmtMoney(householdTaxEstimate.annualTax)} / an (TMI : ${Math.round(householdTaxEstimate.marginalRate * 100)} %)`
+                  : undefined
+              }
+            />
 
             {activePeople.map((p) => {
               const list = incomes.filter((x) => x.personId === p.id) ?? [];
+              const taxEstimate = taxByPerson[p.id] ?? estimateFrenchIncomeTax(0, 1);
               const initials =
                 (p.name || "")
                   .trim()
@@ -1629,7 +2079,12 @@ case "coupleStatus":
                       <div className="incomePersonName">{p.name}</div>
                       <div className="incomePersonHint">Revenus mensuels</div>
                     </div>
-                    <div className="incomePersonTotal">{formatEUR(totalsByPerson[p.id] ?? 0)}</div>
+                    <div className="incomePersonTotalWrap">
+                      <div className="incomePersonTotal">{formatEUR(totalsByPerson[p.id] ?? 0)}</div>
+                      <div className="incomeTaxTotalNote">
+                        impôt : {fmtMoney(taxEstimate.annualTax)} / an (TMI : {Math.round(taxEstimate.marginalRate * 100)} %)
+                      </div>
+                    </div>
                   </div>
 
                   <div className="incomeRows">
@@ -1679,7 +2134,6 @@ case "coupleStatus":
                     <button className="chipBtn" onClick={() => addIncome("Salaire")}>+ Salaire</button>
                     <button className="chipBtn" onClick={() => addIncome("Prime")}>+ Prime</button>
                     <button className="chipBtn" onClick={() => addIncome("Autre")}>+ Autre</button>
-                    <button className="chipBtn isGhost" onClick={() => addIncome("Revenu")}>+ Ajouter</button>
                   </div>
                 </div>
               );
@@ -1704,27 +2158,117 @@ case "coupleStatus":
           </div>
         );
       case "situation":
-        return (
-        <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
-          <div className="wizQuestion">Possédez-vous des biens immobiliers ?</div>
+        return null;
+      
+case "owners": {
+  const ownerSuggestions = housingExpenseSuggestions((ownerDraft as any)?.kind, Number((ownerDraft as any)?.superficie ?? 0));
+  const ownerMonthlyExpenses = (o: any) => {
+    const customMonthly = (arr: any[] | undefined) =>
+      (arr ?? []).reduce((sum, line) => sum + toMonthly(Number(line?.amount ?? 0), (line?.period as any) ?? "month"), 0);
+
+    return (
+      Number(o?.chargesCopro ?? o?.charges ?? 0) +
+      Number(o?.mensualiteEmprunt ?? 0) +
+      Number(o?.assuranceEmprunt ?? 0) +
+      Number(o?.eau ?? 0) +
+      Number(o?.elec ?? 0) +
+      Number(o?.gaz ?? 0) +
+      Number(o?.internet ?? 0) +
+      Number(o?.assurance ?? 0) +
+      toMonthly(Number(o?.taxeFonciere ?? 0), (o?.taxeFoncierePeriod as any) ?? "year") +
+      toMonthly(Number(o?.impotRevenu ?? 0), (o?.impotRevenuPeriod as any) ?? "year") +
+      customMonthly(o?.customCharges) +
+      customMonthly(o?.customImpots) +
+      customMonthly(o?.customAbonnements) +
+      customMonthly(o?.customAutres)
+    );
+  };
+
+  const ownerNetMonthly = (o: any) => {
+    const revenus = Number(o?.loyerPercu ?? 0);
+    return revenus - ownerMonthlyExpenses(o);
+  };
+  const ownerExpensesTotal = owners.reduce((sum, o: any) => sum + ownerMonthlyExpenses(o), 0);
+
+  const saveOwner = () => {
+    const d: any = ownerDraft ?? {};
+    if (ownerEditingId) {
+      setOwners((prev) => prev.map((x: any) => (x.id === ownerEditingId ? ({ ...x, ...d } as any) : x)));
+    } else {
+      const id = uid("o");
+      const row: any = {
+        id,
+        kind: d.kind ?? "appartement",
+        ville: String(d.ville ?? ""),
+        villeCode: d.villeCode ? String(d.villeCode) : undefined,
+        villeCodePostal: d.villeCodePostal ? String(d.villeCodePostal) : undefined,
+        villeDepartement: d.villeDepartement ? String(d.villeDepartement) : undefined,
+        superficie: d.superficie,
+        occupant: d.occupant ?? (activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun")),
+        ownerOccupant: false,
+        loyerPercu: Number(d.loyerPercu ?? 0),
+        chargesCopro: Number(d.chargesCopro ?? 0) || undefined,
+        mensualiteEmprunt: Number(d.mensualiteEmprunt ?? 0) || undefined,
+        assuranceEmprunt: Number(d.assuranceEmprunt ?? 0) || undefined,
+        taxeFonciere: Number(d.taxeFonciere ?? 0) || undefined,
+        taxeFoncierePeriod: d.taxeFoncierePeriod ?? "year",
+        impotRevenu: Number(d.impotRevenu ?? 0) || undefined,
+        impotRevenuPeriod: d.impotRevenuPeriod ?? "year",
+        internet: Number(d.internet ?? 0) || undefined,
+        assurance: Number(d.assurance ?? 0) || undefined,
+        eau: Number(d.eau ?? 0) || undefined,
+        elec: Number(d.elec ?? 0) || undefined,
+        gaz: Number(d.gaz ?? 0) || undefined,
+        customCharges: Array.isArray(d.customCharges) ? d.customCharges : [],
+        customImpots: Array.isArray(d.customImpots) ? d.customImpots : [],
+        customAbonnements: Array.isArray(d.customAbonnements) ? d.customAbonnements : [],
+        customAutres: Array.isArray(d.customAutres) ? d.customAutres : [],
+      };
+      setOwners((prev) => [...prev, row]);
+    }
+    setOwnerModalStep(0);
+    setOwnerEditingId(null);
+  };
+
+  const duplicateOwner = (id: string) => {
+    const row = owners.find((o) => o.id === id);
+    if (!row) return;
+    const newId = uid("o");
+    const copy: OwnerRow = {
+      ...row,
+      id: newId,
+      ville: row.ville ? `${row.ville} (copie)` : "Bien (copie)",
+    };
+    setOwners((prev) => [...prev, copy]);
+    setOwnerEditingId(newId);
+    setOwnerDraft({ ...copy });
+    setOwnerModalStep(1);
+  };
+
+  return (
+    <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
+      {ownersSubStep === 1 ? (
+        <>
+          <div className="wizQuestion">Êtes-vous propriétaire ?</div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Appartement, maison, studio… (vous pourrez en ajouter plusieurs)
+            Appartement, maison, studio… (vous pourrez ensuite ajouter un ou plusieurs biens)
           </div>
 
           <YesNoToggle
             value={isOwner}
             onChange={(v) => {
-              // Auto-advance on choice to avoid extra "Continuer" taps.
               if (v === true) {
-                autoAdvanceToNextStep(() => {
+                autoAdvanceToSubStep(setOwnersSubStep, 2, () => {
                   setIsOwner(true);
                 });
               } else {
-                autoAdvanceToNextStep(() => {
-                  setIsOwner(false);
-                  setOwners([]);
-                  markSkipped("owners");
-                });
+                setIsOwner(false);
+                setOwners([]);
+                window.setTimeout(() => {
+                  markCompleted("owners");
+                  persistProfile({ isOwner: false, owners: [] });
+                  goNext();
+                }, AUTO_ADVANCE_MS);
               }
             }}
           />
@@ -1738,134 +2282,209 @@ case "coupleStatus":
               className="wizSkipLink"
               onClick={() => {
                 setIsOwner(false);
+                setOwners([]);
                 skipStep();
               }}
             >
               Passer cette étape
             </button>
           </div>
-        </div>
-        );
-      
-case "owners": {
-  return (
-    <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
-      <div className="wizQuestion">Mes biens</div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        Ajoutez vos logements pour estimer vos revenus/charges. Vous pouvez en ajouter plusieurs.
-      </div>
+        </>
+      ) : (
+        <>
+      <WizardSectionHeader
+        title="Mes biens"
+        subtitle="Ajoutez vos logements pour estimer vos revenus/charges. Vous pouvez en ajouter plusieurs."
+        total={fmtMoney(ownerExpensesTotal)}
+      />
 
-      <div style={{ display: "grid", gap: 10 }}>
+      <div className="ownerList">
         {owners.length === 0 ? (
-          <div className="card" style={{ padding: 14 }}>
-            <div style={{ fontWeight: 800 }}>Aucun bien ajouté</div>
-            <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-              Si vous n’avez pas de bien, vous pouvez passer cette étape.
-            </div>
-          </div>
+          <>
+            <WizardEmptyState
+              icon="🏢"
+              title="Aucun bien ajouté"
+              subtitle="Si vous n’avez pas de bien, vous pouvez passer cette étape."
+            />
+            {ownerModalStep === 0 ? (
+              <WizardAddButton
+                stacked
+                label="Ajouter un appartement / maison"
+                onClick={() => {
+                  setOwnerEditingId(null);
+                  setOwnerDraft({
+                    kind: "appartement",
+                    ville: "",
+                    superficie: undefined,
+                    occupant: activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun"),
+                    loyerPercu: 0,
+                  } as any);
+                  setOwnerModalStep(1);
+                }}
+              />
+            ) : null}
+          </>
         ) : (
           owners.map((o: any) => (
-            <div key={o.id} className="card" style={{ padding: 12, display: "grid", gap: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ fontWeight: 800 }}>
-                  {(o.kind ?? "Bien").toString()} · {(o.ville ?? "Ville").toString()}
+            <div key={o.id} className="ownerCardWrap">
+              <div className="card bienCard ownerCard">
+                <div className="ownerCardHead">
+                  <div className="ownerCardIcon" aria-hidden="true">
+                    {ownerKindIcon(o.kind)}
+                  </div>
+                  <div className="ownerCardMeta">
+                    <div className="ownerCardTitle">
+                      {String(o.ville ?? "Ville")}
+                    </div>
+                    <div className="ownerCardSubtitle">
+                      {o.superficie ? `${o.superficie} m²` : "Surface non précisée"}
+                    </div>
+                  </div>
+                  <div className="ownerCardAmountBox">
+                    <div className="ownerCardAmountLabel">Net</div>
+                    <div className={`ownerCardAmount ${ownerNetMonthly(o) >= 0 ? "isPositive" : "isNegative"}`}>
+                      {fmtMoney(ownerNetMonthly(o))}
+                    </div>
+                  </div>
                 </div>
-                <div className="muted">{o.superficie ? `${o.superficie} m²` : ""}</div>
+
+                <div className="ownerCardStats">
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Type</span>
+                    <span className="ownerStatValue">{String(o.kind ?? "Bien")}</span>
+                  </div>
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Dépenses</span>
+                    <span className="ownerStatValue">{fmtMoney(ownerMonthlyExpenses(o))}/mois</span>
+                  </div>
+                <div className="ownerStatPill">
+                  <span className="ownerStatLabel">Loyer</span>
+                  <span className="ownerStatValue">{fmtMoney(Number(o.loyerPercu ?? 0))}/mois</span>
+                </div>
               </div>
-              <div className="muted" style={{ fontSize: 13 }}>
-                Loyer perçu : <span style={{ fontWeight: 800 }}>{fmtMoney(Number(o.loyerPercu ?? 0))}</span>
               </div>
 
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
+              <div className="bienActions ownerCardHoverActions">
                 <button
-                  className="btnSecondary"
+                  type="button"
+                  className="ownerIconAction"
+                  aria-label="Dupliquer"
+                  title="Dupliquer"
+                  onClick={() => duplicateOwner(o.id)}
+                >
+                  ⧉
+                </button>
+                <button
+                  type="button"
+                  className="ownerIconAction"
+                  aria-label="Modifier"
+                  title="Modifier"
                   onClick={() => {
                     setOwnerEditingId(o.id);
                     setOwnerDraft({ ...(o as any) });
                     setOwnerModalStep(1);
                   }}
                 >
-                  Modifier
+                  ✏️
                 </button>
-                <button className="btnSecondary" onClick={() => setOwners((prev) => prev.filter((x) => x.id !== o.id))}>
-                  Supprimer
+                <button
+                  type="button"
+                  className="ownerIconAction"
+                  aria-label="Supprimer"
+                  title="Supprimer"
+                  onClick={() => setOwners((prev) => prev.filter((x) => x.id !== o.id))}
+                >
+                  🗑️
                 </button>
               </div>
             </div>
           ))
         )}
 
-        <button
-          className="btnSecondary"
-          onClick={() => {
-            setOwnerEditingId(null);
-            setOwnerDraft({
-              kind: "appartement",
-              ville: "",
-              superficie: undefined,
-              occupant: activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun"),
-              loyerPercu: 0,
-            } as any);
-            setOwnerModalStep(1);
-          }}
-        >
-          + Ajouter un appartement/maison
-        </button>
+        {ownerModalStep === 0 && owners.length > 0 ? (
+          <WizardAddButton
+            label="Ajouter un appartement / maison"
+            onClick={() => {
+              setOwnerEditingId(null);
+              setOwnerDraft({
+                kind: "appartement",
+                ville: "",
+                superficie: undefined,
+                occupant: activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun"),
+                loyerPercu: 0,
+              } as any);
+              setOwnerModalStep(1);
+            }}
+          />
+        ) : null}
       </div>
 
       {ownerModalStep === 1 ? (
-        <div className="card" style={{ padding: 14, display: "grid", gap: 12 }}>
+        <div className="card ownerModalCard ownerModalCardStep1">
           <div style={{ fontWeight: 900 }}>{ownerEditingId ? "Modifier un bien" : "Ajouter un bien"}</div>
 
           <div style={{ display: "grid", gap: 10 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Type</span>
-              <select
-                className="input"
-                value={(ownerDraft as any)?.kind ?? "appartement"}
-                onChange={(e) => setOwnerDraft((p) => ({ ...(p as any), kind: e.target.value }))}
-              >
-                <option value="appartement">Appartement</option>
-                <option value="maison">Maison</option>
-                <option value="studio">Studio</option>
-                <option value="autre">Autre</option>
-              </select>
-            </label>
+            <div className="wizardInlineFieldGrid">
+              <label style={{ display: "grid", gap: 6 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Type</span>
+                <select
+                  className="input"
+                  value={(ownerDraft as any)?.kind ?? "appartement"}
+                  onChange={(e) => setOwnerDraft((p) => ({ ...(p as any), kind: e.target.value }))}
+                >
+                  <option value="appartement">Appartement</option>
+                  <option value="maison">Maison</option>
+                  <option value="studio">Studio</option>
+                  <option value="autre">Autre</option>
+                </select>
+              </label>
 
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Ville</span>
-              <input
-                className="input"
-                value={(ownerDraft as any)?.ville ?? ""}
-                onChange={(e) => setOwnerDraft((p) => ({ ...(p as any), ville: e.target.value }))}
-                placeholder="Ex: Saint-Denis"
-              />
-            </label>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Surface (m²)</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  value={(ownerDraft as any)?.superficie ?? ""}
+                  onChange={(e) => setOwnerDraft((p) => ({ ...(p as any), superficie: num(e.target.value) }))}
+                  placeholder="Ex: 25"
+                />
+              </label>
+            </div>
 
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Surface (m²)</span>
-              <input
-                className="input"
-                inputMode="numeric"
-                value={(ownerDraft as any)?.superficie ?? ""}
-                onChange={(e) => setOwnerDraft((p) => ({ ...(p as any), superficie: num(e.target.value) }))}
-                placeholder="Ex: 25"
-              />
-            </label>
+            <CityAutocompleteField
+              label="Ville"
+              value={(ownerDraft as any)?.ville ?? ""}
+              onChange={(value) =>
+                setOwnerDraft((p) => ({
+                  ...(p as any),
+                  ville: value,
+                  villeCode: undefined,
+                  villeCodePostal: undefined,
+                  villeDepartement: undefined,
+                }))
+              }
+              onSelect={(city) =>
+                setOwnerDraft((p) => ({
+                  ...(p as any),
+                  ville: city.name,
+                  villeCode: city.code,
+                  villeCodePostal: city.postalCode,
+                  villeDepartement: city.departement,
+                }))
+              }
+              placeholder="Ex: Saint-Denis ou 97400"
+            />
 
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Propriétaire</span>
-              <select
-                className="input"
-                value={(ownerDraft as any)?.occupant ?? (activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun"))}
-                onChange={(e) => setOwnerDraft((p) => ({ ...(p as any), occupant: e.target.value }))}
-              >
-                {activePeople.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-                {activePeople.length > 1 ? <option value="commun">Commun</option> : null}
-              </select>
-            </label>
+            {activePeople.length > 1 ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Propriétaire</span>
+                <WizardOccupantPicker
+                  value={(ownerDraft as any)?.occupant ?? "commun"}
+                  people={activePeople}
+                  onChange={(value) => setOwnerDraft((p) => ({ ...(p as any), occupant: value }))}
+                />
+              </div>
+            ) : null}
 
             <label style={{ display: "grid", gap: 6 }}>
               <span className="muted" style={{ fontSize: 12 }}>Loyer perçu (€/mois)</span>
@@ -1879,51 +2498,139 @@ case "owners": {
             </label>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => { setOwnerModalStep(0); setOwnerEditingId(null); }}>
-              Annuler
-            </button>
-            <button
-              className="btnPrimary"
-              style={{ width: 160 }}
-              onClick={() => {
-                const d: any = ownerDraft ?? {};
-                if (ownerEditingId) {
-                  setOwners((prev) => prev.map((x: any) => (x.id === ownerEditingId ? ({ ...x, ...d } as any) : x)));
-                } else {
-                  const id = uid("o");
-                  const row: any = {
-                    id,
-                    kind: d.kind ?? "appartement",
-                    ville: String(d.ville ?? ""),
-                    superficie: d.superficie,
-                    occupant: d.occupant ?? (activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun")),
-                    ownerOccupant: false,
-                    loyerPercu: Number(d.loyerPercu ?? 0),
-                    chargesCopro: undefined,
-                    taxeFonciere: undefined,
-                    taxeFoncierePeriod: "year",
-                    impotRevenu: undefined,
-                    impotRevenuPeriod: "year",
-                    internet: undefined,
-                    assurance: undefined,
-                    eau: undefined,
-                    elec: undefined,
-                    gaz: undefined,
-                    customCharges: [],
-                    customImpots: [],
-                    customAbonnements: [],
-                    customAutres: [],
-                  };
-                  setOwners((prev) => [...prev, row]);
-                }
-                setOwnerModalStep(0);
-                setOwnerEditingId(null);
-              }}
-            >
-              Enregistrer
-            </button>
+          <WizardFormActions
+            leftLabel="Annuler"
+            onLeft={() => { setOwnerModalStep(0); setOwnerEditingId(null); }}
+            rightLabel="Passer aux dépenses"
+            onRight={() => setOwnerModalStep(2)}
+            leftClassName="wizardSecondaryBtn"
+            rightClassName="wizardSecondaryBtn wizardSecondaryBtnStrong"
+          />
+        </div>
+      ) : null}
+
+      {ownerModalStep === 2 ? (
+        <div className="card ownerModalCard ownerModalCardStep2">
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontWeight: 900 }}>Dépenses du bien</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Ajoutez les charges et impôts liés à {String((ownerDraft as any)?.kind ?? "ce bien").toLowerCase()}.
+            </div>
           </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            <BudgetSection
+              title="Charges"
+              base={[
+                { key: "chargesCopro", label: "Charges copro", suggestion: ownerSuggestions?.chargesCopro, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), chargesCopro: ownerSuggestions?.chargesCopro ?? 0 })) },
+                { key: "eau", label: "Eau", suggestion: ownerSuggestions?.eau, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), eau: ownerSuggestions?.eau ?? 0 })) },
+                { key: "elec", label: "Électricité", suggestion: ownerSuggestions?.elec, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), elec: ownerSuggestions?.elec ?? 0 })) },
+                { key: "gaz", label: "Gaz", suggestion: ownerSuggestions?.gaz, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), gaz: ownerSuggestions?.gaz ?? 0 })) },
+              ]}
+              values={ownerDraft}
+              onValue={(key, val) => setOwnerDraft((p) => ({ ...(p as any), [key]: num(val) }))}
+              custom={{
+                lines: ((ownerDraft as any)?.customCharges ?? []) as Array<any>,
+                onAdd: () =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customCharges: [...(((p as any)?.customCharges ?? []) as Array<any>), { id: uid("oc"), name: "", amount: 0, stage: "name", period: "month" }],
+                  })),
+                onUpdate: (id, patch) =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customCharges: (((p as any)?.customCharges ?? []) as Array<any>).map((line: any) =>
+                      line.id === id ? { ...line, ...patch } : line
+                    ),
+                  })),
+                onRemove: (id) =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customCharges: (((p as any)?.customCharges ?? []) as Array<any>).filter((line: any) => line.id !== id),
+                  })),
+              }}
+            />
+
+            <BudgetSection
+              title="Emprunt"
+              base={[
+                { key: "mensualiteEmprunt", label: "Mensualité", suggestion: ownerSuggestions?.mensualiteEmprunt, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), mensualiteEmprunt: ownerSuggestions?.mensualiteEmprunt ?? 0 })) },
+                { key: "assuranceEmprunt", label: "Assurance", suggestion: ownerSuggestions?.assuranceEmprunt, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), assuranceEmprunt: ownerSuggestions?.assuranceEmprunt ?? 0 })) },
+              ]}
+              values={ownerDraft}
+              onValue={(key, val) => setOwnerDraft((p) => ({ ...(p as any), [key]: num(val) }))}
+            />
+
+            <BudgetSection
+              title="Abonnements"
+              base={[
+                { key: "internet", label: "Internet", suggestion: ownerSuggestions?.internet, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), internet: ownerSuggestions?.internet ?? 0 })) },
+                { key: "assurance", label: "Assurance", suggestion: ownerSuggestions?.assurance, onApplySuggestion: () => setOwnerDraft((p) => ({ ...(p as any), assurance: ownerSuggestions?.assurance ?? 0 })) },
+              ]}
+              values={ownerDraft}
+              onValue={(key, val) => setOwnerDraft((p) => ({ ...(p as any), [key]: num(val) }))}
+              custom={{
+                lines: ((ownerDraft as any)?.customAbonnements ?? []) as Array<any>,
+                onAdd: () =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customAbonnements: [...(((p as any)?.customAbonnements ?? []) as Array<any>), { id: uid("oa"), name: "", amount: 0, stage: "name", period: "month" }],
+                  })),
+                onUpdate: (id, patch) =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customAbonnements: (((p as any)?.customAbonnements ?? []) as Array<any>).map((line: any) =>
+                      line.id === id ? { ...line, ...patch } : line
+                    ),
+                  })),
+                onRemove: (id) =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customAbonnements: (((p as any)?.customAbonnements ?? []) as Array<any>).filter((line: any) => line.id !== id),
+                  })),
+              }}
+            />
+
+            <BudgetSection
+              title="Impôts"
+              titleSuffix="(annuel)"
+              base={[
+                { key: "taxeFonciere", label: "Taxe foncière" },
+                { key: "impotRevenu", label: "Impôt revenu" },
+              ]}
+              values={ownerDraft}
+              onValue={(key, val) => setOwnerDraft((p) => ({ ...(p as any), [key]: num(val) }))}
+              custom={{
+                lines: ((ownerDraft as any)?.customImpots ?? []) as Array<any>,
+                onAdd: () =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customImpots: [...(((p as any)?.customImpots ?? []) as Array<any>), { id: uid("oi"), name: "", amount: 0, stage: "name", period: "year" }],
+                  })),
+                onUpdate: (id, patch) =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customImpots: (((p as any)?.customImpots ?? []) as Array<any>).map((line: any) =>
+                      line.id === id ? { ...line, ...patch } : line
+                    ),
+                  })),
+                onRemove: (id) =>
+                  setOwnerDraft((p) => ({
+                    ...(p as any),
+                    customImpots: (((p as any)?.customImpots ?? []) as Array<any>).filter((line: any) => line.id !== id),
+                  })),
+              }}
+            />
+          </div>
+
+          <WizardFormActions
+            leftLabel="< Retour"
+            onLeft={() => setOwnerModalStep(1)}
+            rightLabel="Enregistrer"
+            onRight={saveOwner}
+            leftClassName="wizardSecondaryBtn"
+            rightClassName="wizardSecondaryBtn wizardSecondaryBtnStrong"
+          />
         </div>
       ) : null}
 
@@ -1947,14 +2654,25 @@ case "owners": {
       <button type="button" className="wizSkipLink" onClick={() => skipStep()}>
         Passer cette étape
       </button>
+        </>
+      )}
     </div>
   );
 }
 
 case "rentals": {
+  const rentalSuggestions = housingExpenseSuggestions((rentalDraft as any)?.kind, Number((rentalDraft as any)?.superficie ?? 0));
   // One-question-per-screen subflow:
   //  - substep 1: yes/no
   //  - substep 2: list + add/edit items (multi-locations)
+  const rentalMonthlyExtras = (r: any) =>
+    Number(r?.charges ?? 0) +
+    Number(r?.eau ?? 0) +
+    Number(r?.elec ?? 0) +
+    Number(r?.gaz ?? 0) +
+    Number(r?.internet ?? 0) +
+    Number(r?.assurance ?? 0);
+
   const openNewRental = () => {
     setRentalEditingId(null);
     setRentalDraft({
@@ -1990,6 +2708,9 @@ case "rentals": {
       id: rentalEditingId ?? uid("r"),
       kind: (d.kind ?? "appartement") as any,
       ville: String(d.ville ?? ""),
+      villeCode: d.villeCode ? String(d.villeCode) : undefined,
+      villeCodePostal: d.villeCodePostal ? String(d.villeCodePostal) : undefined,
+      villeDepartement: d.villeDepartement ? String(d.villeDepartement) : undefined,
       superficie: d.superficie,
       occupant: (d.occupant ?? (activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun"))) as any,
       loyer: Number(d.loyer ?? 0),
@@ -2084,99 +2805,231 @@ case "rentals": {
   // rentalsSubStep === 2
   return (
     <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
-      <div className="wizQuestion">Votre / vos logements</div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        Total estimé (loyer + charges + utilités) : <b>{fmtMoney(totalRentals)}</b>/mois
-      </div>
+      <WizardSectionHeader
+        title="Votre / vos logements"
+        subtitle="Ajoutez les coûts liés à votre résidence."
+        total={fmtMoney(totalRentals)}
+      />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ fontWeight: 900 }}>Mes locations</div>
-        {rentals.length > 0 ? (
-          <button className="btnSecondary" onClick={openNewRental}>+ Ajouter</button>
-        ) : null}
       </div>
 
       {rentals.length === 0 ? (
-        <div className="card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>Aucun logement ajouté</div>
-          <div className="muted" style={{ fontSize: 13 }}>Ajoute au moins ton logement principal, ou passe.</div>
-          <div style={{ height: 10 }} />
-          <button className="btnPrimary" onClick={openNewRental}>+ Ajouter un logement</button>
-        </div>
+        <>
+          <WizardEmptyState
+            icon="🏢"
+            title="Aucun logement ajouté"
+            subtitle="Ajoute au moins ton logement principal, ou passe."
+          />
+          {rentalModalStep === 0 ? (
+            <WizardAddButton label="Ajouter un logement" onClick={openNewRental} />
+          ) : null}
+        </>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div className="ownerList">
           {rentals.map((r) => (
-            <div key={r.id} className="card" style={{ padding: 12, display: "grid", gap: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-                <div style={{ fontWeight: 900 }}>{r.ville || "(Ville)"} · {r.kind}</div>
-                <div className="muted" style={{ fontSize: 12 }}>{fmtMoney((r.loyer ?? 0) + (r.charges ?? 0))}/mois</div>
+            <div key={r.id} className="ownerCardWrap">
+              <div className="card bienCard ownerCard">
+                <div className="ownerCardHead">
+                  <div className="ownerCardIcon" aria-hidden="true">
+                    {ownerKindIcon(r.kind)}
+                  </div>
+                  <div className="ownerCardMeta">
+                    <div className="ownerCardTitle">{r.ville || "Ville"}</div>
+                    <div className="ownerCardSubtitle">{r.superficie ? `${r.superficie} m²` : "Surface non précisée"}</div>
+                  </div>
+                  <div className="ownerCardAmountBox">
+                    <div className="ownerCardAmountLabel">Total</div>
+                    <div className="ownerCardAmount isNegative">{fmtMoney((r.loyer ?? 0) + rentalMonthlyExtras(r))}</div>
+                  </div>
+                </div>
+
+                <div className="ownerCardStats">
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Type</span>
+                    <span className="ownerStatValue">{String(r.kind ?? "Logement")}</span>
+                  </div>
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Dépenses</span>
+                    <span className="ownerStatValue">{fmtMoney(rentalMonthlyExtras(r))}/mois</span>
+                  </div>
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Loyer</span>
+                    <span className="ownerStatValue">{fmtMoney(Number(r.loyer ?? 0))}/mois</span>
+                  </div>
+                </div>
               </div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Loyer {fmtMoney(r.loyer ?? 0)} · Charges {fmtMoney(r.charges ?? 0)}
-              </div>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button className="btnSecondary" onClick={() => duplicateRental(r.id)}>Dupliquer</button>
-                <button className="btnSecondary" onClick={() => openEditRental(r.id)}>Modifier</button>
-                <button className="btnSecondary" onClick={() => removeRental(r.id)}>Supprimer</button>
+
+              <div className="bienActions ownerCardHoverActions">
+                <button type="button" className="ownerIconAction" title="Dupliquer" aria-label="Dupliquer" onClick={() => duplicateRental(r.id)}>
+                  ⧉
+                </button>
+                <button type="button" className="ownerIconAction" title="Modifier" aria-label="Modifier" onClick={() => openEditRental(r.id)}>
+                  ✏️
+                </button>
+                <button type="button" className="ownerIconAction" title="Supprimer" aria-label="Supprimer" onClick={() => removeRental(r.id)}>
+                  🗑️
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {rentalModalStep === 0 && rentals.length > 0 ? (
+        <WizardAddButton label="Ajouter un logement" onClick={openNewRental} />
+      ) : null}
+
       {rentalModalStep === 1 ? (
-        <div className="card" style={{ padding: 14, display: "grid", gap: 12 }}>
+        <div className="card ownerModalCard ownerModalCardStep1">
           <div style={{ fontWeight: 900 }}>{rentalEditingId ? "Modifier un logement" : "Ajouter un logement"}</div>
 
           <div style={{ display: "grid", gap: 10 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Type</span>
-              <select className="input" value={(rentalDraft as any)?.kind ?? "appartement"} onChange={(e) => setRentalDraft((p) => ({ ...(p as any), kind: e.target.value }))}>
-                <option value="appartement">Appartement</option>
-                <option value="maison">Maison</option>
-              </select>
-            </label>
+            <div className="wizardInlineFieldGrid">
+              <label style={{ display: "grid", gap: 6 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Type</span>
+                <select className="input" value={(rentalDraft as any)?.kind ?? "appartement"} onChange={(e) => setRentalDraft((p) => ({ ...(p as any), kind: e.target.value }))}>
+                  <option value="appartement">Appartement</option>
+                  <option value="maison">Maison</option>
+                </select>
+              </label>
 
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Ville</span>
-              <input className="input" value={(rentalDraft as any)?.ville ?? ""} onChange={(e) => setRentalDraft((p) => ({ ...(p as any), ville: e.target.value }))} placeholder="Ex: Saint-Denis" />
-            </label>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Surface (m²)</span>
+                <input className="input" inputMode="numeric" value={(rentalDraft as any)?.superficie ?? ""} onChange={(e) => setRentalDraft((p) => ({ ...(p as any), superficie: num(e.target.value) }))} placeholder="Ex: 25" />
+              </label>
+            </div>
 
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Surface (m²)</span>
-              <input className="input" inputMode="numeric" value={(rentalDraft as any)?.superficie ?? ""} onChange={(e) => setRentalDraft((p) => ({ ...(p as any), superficie: num(e.target.value) }))} placeholder="Ex: 25" />
-            </label>
+            <CityAutocompleteField
+              label="Ville"
+              value={(rentalDraft as any)?.ville ?? ""}
+              onChange={(value) =>
+                setRentalDraft((p) => ({
+                  ...(p as any),
+                  ville: value,
+                  villeCode: undefined,
+                  villeCodePostal: undefined,
+                  villeDepartement: undefined,
+                }))
+              }
+              onSelect={(city) =>
+                setRentalDraft((p) => ({
+                  ...(p as any),
+                  ville: city.name,
+                  villeCode: city.code,
+                  villeCodePostal: city.postalCode,
+                  villeDepartement: city.departement,
+                }))
+              }
+              placeholder="Ex: Saint-Denis ou 97400"
+            />
 
-            <label style={{ display: "grid", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Titulaire</span>
-              <select className="input" value={(rentalDraft as any)?.occupant ?? (activePeople.length > 1 ? "commun" : (activePeople[0]?.id ?? "commun"))} onChange={(e) => setRentalDraft((p) => ({ ...(p as any), occupant: e.target.value }))}>
-                {activePeople.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                {activePeople.length > 1 ? <option value="commun">Commun</option> : null}
-              </select>
-            </label>
+            {activePeople.length > 1 ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Titulaire</span>
+                <WizardOccupantPicker
+                  value={(rentalDraft as any)?.occupant ?? "commun"}
+                  people={activePeople}
+                  onChange={(value) => setRentalDraft((p) => ({ ...(p as any), occupant: value }))}
+                />
+              </div>
+            ) : null}
+          </div>
 
-            <CurrencyField label="Loyer payé" value={(rentalDraft as any)?.loyer ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), loyer: v }))} />
-            <CurrencyField label="Charges" value={(rentalDraft as any)?.charges ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), charges: v }))} />
-            <CurrencyField label="Eau" value={(rentalDraft as any)?.eau ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), eau: v }))} />
-            <CurrencyField label="Électricité" value={(rentalDraft as any)?.elec ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), elec: v }))} />
-            <CurrencyField label="Gaz" value={(rentalDraft as any)?.gaz ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), gaz: v }))} />
-            <CurrencyField label="Internet" value={(rentalDraft as any)?.internet ?? 0} onChange={(v) => setRentalDraft((p) => ({ ...(p as any), internet: v }))} />
-            <CurrencyField
-              label="Assurance habitation"
-              value={(rentalDraft as any)?.assurance ?? 0}
-              onChange={(v) => setRentalDraft((p) => ({ ...(p as any), assurance: v }))}
-              onEnter={saveRental}
+          <WizardFormActions
+            leftLabel="Annuler"
+            onLeft={() => { setRentalModalStep(0); setRentalEditingId(null); }}
+            rightLabel="Passer aux dépenses"
+            onRight={() => setRentalModalStep(2)}
+            leftClassName="wizardSecondaryBtn"
+            rightClassName="wizardSecondaryBtn wizardSecondaryBtnStrong"
+          />
+        </div>
+      ) : null}
+
+      {rentalModalStep === 2 ? (
+        <div className="card ownerModalCard ownerModalCardStep2">
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontWeight: 900 }}>Dépenses du logement</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Ajoutez les charges liées à ce logement.
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            <BudgetSection
+              title="Charges"
+              base={[
+                { key: "loyer", label: "Loyer" },
+                { key: "charges", label: "Charges", suggestion: rentalSuggestions?.charges, onApplySuggestion: () => setRentalDraft((p) => ({ ...(p as any), charges: rentalSuggestions?.charges ?? 0 })) },
+                { key: "eau", label: "Eau", suggestion: rentalSuggestions?.eau, onApplySuggestion: () => setRentalDraft((p) => ({ ...(p as any), eau: rentalSuggestions?.eau ?? 0 })) },
+                { key: "elec", label: "Électricité", suggestion: rentalSuggestions?.elec, onApplySuggestion: () => setRentalDraft((p) => ({ ...(p as any), elec: rentalSuggestions?.elec ?? 0 })) },
+                { key: "gaz", label: "Gaz", suggestion: rentalSuggestions?.gaz, onApplySuggestion: () => setRentalDraft((p) => ({ ...(p as any), gaz: rentalSuggestions?.gaz ?? 0 })) },
+              ]}
+              values={rentalDraft}
+              onValue={(key, val) => setRentalDraft((p) => ({ ...(p as any), [key]: num(val) }))}
+              custom={{
+                lines: ((rentalDraft as any)?.customCharges ?? []) as Array<any>,
+                onAdd: () =>
+                  setRentalDraft((p) => ({
+                    ...(p as any),
+                    customCharges: [...(((p as any)?.customCharges ?? []) as Array<any>), { id: uid("rc"), name: "", amount: 0, stage: "name", period: "month" }],
+                  })),
+                onUpdate: (id, patch) =>
+                  setRentalDraft((p) => ({
+                    ...(p as any),
+                    customCharges: (((p as any)?.customCharges ?? []) as Array<any>).map((line: any) =>
+                      line.id === id ? { ...line, ...patch } : line
+                    ),
+                  })),
+                onRemove: (id) =>
+                  setRentalDraft((p) => ({
+                    ...(p as any),
+                    customCharges: (((p as any)?.customCharges ?? []) as Array<any>).filter((line: any) => line.id !== id),
+                  })),
+              }}
+            />
+
+            <BudgetSection
+              title="Abonnements"
+              base={[
+                { key: "internet", label: "Internet", suggestion: rentalSuggestions?.internet, onApplySuggestion: () => setRentalDraft((p) => ({ ...(p as any), internet: rentalSuggestions?.internet ?? 0 })) },
+                { key: "assurance", label: "Assurance", suggestion: rentalSuggestions?.assurance, onApplySuggestion: () => setRentalDraft((p) => ({ ...(p as any), assurance: rentalSuggestions?.assurance ?? 0 })) },
+              ]}
+              values={rentalDraft}
+              onValue={(key, val) => setRentalDraft((p) => ({ ...(p as any), [key]: num(val) }))}
+              custom={{
+                lines: ((rentalDraft as any)?.customAbonnements ?? []) as Array<any>,
+                onAdd: () =>
+                  setRentalDraft((p) => ({
+                    ...(p as any),
+                    customAbonnements: [...(((p as any)?.customAbonnements ?? []) as Array<any>), { id: uid("ra"), name: "", amount: 0, stage: "name", period: "month" }],
+                  })),
+                onUpdate: (id, patch) =>
+                  setRentalDraft((p) => ({
+                    ...(p as any),
+                    customAbonnements: (((p as any)?.customAbonnements ?? []) as Array<any>).map((line: any) =>
+                      line.id === id ? { ...line, ...patch } : line
+                    ),
+                  })),
+                onRemove: (id) =>
+                  setRentalDraft((p) => ({
+                    ...(p as any),
+                    customAbonnements: (((p as any)?.customAbonnements ?? []) as Array<any>).filter((line: any) => line.id !== id),
+                  })),
+              }}
             />
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => { setRentalModalStep(0); setRentalEditingId(null); }}>
-              Annuler
-            </button>
-            <button className="btnPrimary" style={{ width: 160 }} onClick={saveRental}>
-              Enregistrer
-            </button>
-          </div>
+          <WizardFormActions
+            leftLabel="< Retour"
+            onLeft={() => setRentalModalStep(1)}
+            rightLabel="Enregistrer"
+            onRight={saveRental}
+            leftClassName="wizardSecondaryBtn"
+            rightClassName="wizardSecondaryBtn wizardSecondaryBtnStrong"
+          />
         </div>
       ) : null}
 
@@ -2205,6 +3058,15 @@ case "rentals": {
 }
 
 case "cars": {
+  const carMonthlyTotal = (c: any) =>
+    Number(c?.assurance ?? 0) +
+    Number(c?.carburant ?? 0) +
+    Number(c?.entretien ?? 0) +
+    Number(c?.credit ?? 0) +
+    Number(c?.parking ?? 0) +
+    Number(c?.peage ?? 0) +
+    ((c?.customMonthly ?? []) as any[]).reduce((sum, line) => sum + Number(line?.amount ?? 0), 0);
+
   const openNewCar = () => {
     setCarEditingId(null);
     setCarDraft({
@@ -2310,48 +3172,84 @@ case "cars": {
   // carsSubStep === 2
   return (
     <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
-      <div className="wizQuestion">Vos véhicules</div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        Total estimé : <b>{fmtMoney(totalCars)}</b>/mois
-      </div>
+      <WizardSectionHeader
+        title="Vos véhicules"
+        subtitle="Ajoutez les coûts liés à votre mobilité."
+        total={fmtMoney(totalCars)}
+      />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ fontWeight: 900 }}>Mes voitures</div>
-        {cars.length > 0 ? (
-          <button className="btnSecondary" onClick={openNewCar}>+ Ajouter</button>
-        ) : null}
       </div>
 
       {cars.length === 0 ? (
-        <div className="card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>Aucune voiture ajoutée</div>
-          <div className="muted" style={{ fontSize: 13 }}>Ajoute ta voiture principale, ou passe.</div>
-          <div style={{ height: 10 }} />
-          <button className="btnPrimary" onClick={openNewCar}>+ Ajouter une voiture</button>
-        </div>
+        <>
+          <WizardEmptyState
+            icon="🚗"
+            title="Aucune voiture ajoutée"
+            subtitle="Ajoute ta voiture principale, ou passe."
+          />
+          {carModalStep === 0 ? (
+            <WizardAddButton label="Ajouter une voiture" onClick={openNewCar} />
+          ) : null}
+        </>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div className="ownerList">
           {cars.map((c) => (
-            <div key={c.id} className="card" style={{ padding: 12, display: "grid", gap: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-                <div style={{ fontWeight: 900 }}>{c.label || "Voiture"}</div>
-                <div className="muted" style={{ fontSize: 12 }}>{fmtMoney(c.assurance + c.carburant + c.entretien + c.credit + c.parking + c.peage)}/mois</div>
+            <div key={c.id} className="ownerCardWrap">
+              <div className="card bienCard ownerCard">
+                <div className="ownerCardHead">
+                  <div className="ownerCardIcon" aria-hidden="true">{vehicleIcon(c.label)}</div>
+                  <div className="ownerCardMeta">
+                    <div className="ownerCardTitle">{c.label || "Voiture"}</div>
+                    <div className="ownerCardSubtitle">
+                      {c.ownerKey === "both" ? "Commun" : activePeople.find((p) => p.id === c.ownerKey)?.name || "Titulaire"}
+                    </div>
+                  </div>
+                  <div className="ownerCardAmountBox">
+                    <div className="ownerCardAmountLabel">Coût</div>
+                    <div className="ownerCardAmount isNegative">{fmtMoney(carMonthlyTotal(c))}</div>
+                  </div>
+                </div>
+
+                <div className="ownerCardStats">
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Assurance</span>
+                    <span className="ownerStatValue">{fmtMoney(Number(c.assurance ?? 0))}/mois</span>
+                  </div>
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Carburant</span>
+                    <span className="ownerStatValue">{fmtMoney(Number(c.carburant ?? 0))}/mois</span>
+                  </div>
+                  <div className="ownerStatPill">
+                    <span className="ownerStatLabel">Total</span>
+                    <span className="ownerStatValue">{fmtMoney(carMonthlyTotal(c))}/mois</span>
+                  </div>
+                </div>
               </div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Assurance {fmtMoney(c.assurance)} · Carburant {fmtMoney(c.carburant)} · Entretien {fmtMoney(c.entretien)} · Crédit {fmtMoney(c.credit)}
-              </div>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button className="btnSecondary" onClick={() => duplicateCar(c.id)}>Dupliquer</button>
-                <button className="btnSecondary" onClick={() => openEditCar(c.id)}>Modifier</button>
-                <button className="btnSecondary" onClick={() => removeCar(c.id)}>Supprimer</button>
+
+              <div className="bienActions ownerCardHoverActions">
+                <button type="button" className="ownerIconAction" title="Dupliquer" aria-label="Dupliquer" onClick={() => duplicateCar(c.id)}>
+                  ⧉
+                </button>
+                <button type="button" className="ownerIconAction" title="Modifier" aria-label="Modifier" onClick={() => openEditCar(c.id)}>
+                  ✏️
+                </button>
+                <button type="button" className="ownerIconAction" title="Supprimer" aria-label="Supprimer" onClick={() => removeCar(c.id)}>
+                  🗑️
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {carModalStep === 0 && cars.length > 0 ? (
+        <WizardAddButton label="Ajouter une voiture" onClick={openNewCar} />
+      ) : null}
+
       {carModalStep === 1 ? (
-        <div className="card" style={{ padding: 14, display: "grid", gap: 12 }}>
+        <div className="card ownerModalCard ownerModalCardStep1">
           <div style={{ fontWeight: 900 }}>{carEditingId ? "Modifier un véhicule" : "Ajouter un véhicule"}</div>
 
           <div style={{ display: "grid", gap: 10 }}>
@@ -2367,26 +3265,72 @@ case "cars": {
                 {activePeople.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
               </select>
             </label>
+          </div>
 
-            <CurrencyField label="Assurance" value={(carDraft as any)?.assurance ?? 0} onChange={(v) => setCarDraft((p) => ({ ...(p as any), assurance: v }))} />
-            <CurrencyField label="Essence" value={(carDraft as any)?.carburant ?? 0} onChange={(v) => setCarDraft((p) => ({ ...(p as any), carburant: v }))} />
-            <CurrencyField label="Entretien" value={(carDraft as any)?.entretien ?? 0} onChange={(v) => setCarDraft((p) => ({ ...(p as any), entretien: v }))} />
-            <CurrencyField
-              label="Crédit auto"
-              value={(carDraft as any)?.credit ?? 0}
-              onChange={(v) => setCarDraft((p) => ({ ...(p as any), credit: v }))}
-              onEnter={saveCar}
+          <WizardFormActions
+            leftLabel="Annuler"
+            onLeft={() => { setCarModalStep(0); setCarEditingId(null); }}
+            rightLabel="Passer aux dépenses"
+            onRight={() => setCarModalStep(2)}
+            leftClassName="wizardSecondaryBtn"
+            rightClassName="wizardSecondaryBtn wizardSecondaryBtnStrong"
+          />
+        </div>
+      ) : null}
+
+      {carModalStep === 2 ? (
+        <div className="card ownerModalCard ownerModalCardStep2">
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontWeight: 900 }}>Dépenses du véhicule</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Ajoutez les charges liées à ce véhicule.
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            <BudgetSection
+              title="Charges"
+              base={[
+                { key: "assurance", label: "Assurance" },
+                { key: "carburant", label: "Carburant" },
+                { key: "entretien", label: "Entretien" },
+                { key: "credit", label: "Crédit auto" },
+                { key: "parking", label: "Parking" },
+                { key: "peage", label: "Péage" },
+              ]}
+              values={carDraft}
+              onValue={(key, val) => setCarDraft((p) => ({ ...(p as any), [key]: num(val) }))}
+              custom={{
+                lines: ((carDraft as any)?.customMonthly ?? []) as Array<any>,
+                onAdd: () =>
+                  setCarDraft((p) => ({
+                    ...(p as any),
+                    customMonthly: [...(((p as any)?.customMonthly ?? []) as Array<any>), { id: uid("cm"), name: "", amount: 0, stage: "name", period: "month" }],
+                  })),
+                onUpdate: (id, patch) =>
+                  setCarDraft((p) => ({
+                    ...(p as any),
+                    customMonthly: (((p as any)?.customMonthly ?? []) as Array<any>).map((line: any) =>
+                      line.id === id ? { ...line, ...patch } : line
+                    ),
+                  })),
+                onRemove: (id) =>
+                  setCarDraft((p) => ({
+                    ...(p as any),
+                    customMonthly: (((p as any)?.customMonthly ?? []) as Array<any>).filter((line: any) => line.id !== id),
+                  })),
+              }}
             />
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <button className="btnSecondary" style={{ width: 140 }} onClick={() => { setCarModalStep(0); setCarEditingId(null); }}>
-              Annuler
-            </button>
-            <button className="btnPrimary" style={{ width: 160 }} onClick={saveCar}>
-              Enregistrer
-            </button>
-          </div>
+          <WizardFormActions
+            leftLabel="< Retour"
+            onLeft={() => setCarModalStep(1)}
+            rightLabel="Enregistrer"
+            onRight={saveCar}
+            leftClassName="wizardSecondaryBtn"
+            rightClassName="wizardSecondaryBtn wizardSecondaryBtnStrong"
+          />
         </div>
       ) : null}
 
@@ -2416,36 +3360,35 @@ case "cars": {
 
 case "daily": {
   const courses = Number((daily as any)?.courses ?? 0);
+  const transport = Number((daily as any)?.transport ?? 0);
   const loisirs = Number((daily as any)?.loisirs ?? 0);
   const sante = Number((daily as any)?.sante ?? 0);
-  const total = courses + loisirs + sante;
+  const autres = Number((daily as any)?.autres ?? 0);
+  const total = courses + transport + loisirs + sante + autres;
 
   const setDailyField = (k: string, v: number) => setDaily((prev: any) => ({ ...(prev ?? {}), [k]: v }));
 
-  const DAILY_PRESETS: Array<{ key: "small" | "medium" | "large"; label: string; hint: string; v: { courses: number; loisirs: number; sante: number } }> = [
-    { key: "small", label: "Petit", hint: "Serré", v: { courses: 350, loisirs: 150, sante: 80 } },
-    { key: "medium", label: "Moyen", hint: "Équilibré", v: { courses: 600, loisirs: 300, sante: 120 } },
-    { key: "large", label: "Large", hint: "Confort", v: { courses: 900, loisirs: 500, sante: 200 } },
+  const DAILY_PRESETS: Array<{ key: "small" | "medium" | "large"; label: string; hint: string; v: DailyLife }> = [
+    { key: "small", label: "Petit", hint: "Serré", v: { courses: 350, transport: 120, loisirs: 150, sante: 80, autres: 70 } },
+    { key: "medium", label: "Moyen", hint: "Équilibré", v: { courses: 600, transport: 220, loisirs: 300, sante: 120, autres: 140 } },
+    { key: "large", label: "Large", hint: "Confort", v: { courses: 900, transport: 320, loisirs: 500, sante: 200, autres: 220 } },
   ];
 
-  const applyPresetAndContinue = (key: "small" | "medium" | "large") => {
+  const applyPreset = (key: "small" | "medium" | "large") => {
     const p = DAILY_PRESETS.find((x) => x.key === key);
     if (!p) return;
     setDaily(p.v);
     setDailyPresetUsed(key);
-    setDailyInteracted(false);
-    // UX: let selection be visible briefly before navigating.
-    setTimeout(() => {
-      markCompleted("daily");
-      persistProfile();
-      goNext();
-    }, 180);
+    setDailyInteracted(true);
   };
 
   return (
     <div className="wizardPanel" style={{ display: "grid", gap: 14 }}>
-      <div className="wizQuestion">Estimons vos dépenses courantes par mois.</div>
-      <div className="muted" style={{ fontSize: 13 }}>Ajustez rapidement, vous affinerez ensuite.</div>
+      <WizardSectionHeader
+        title="Autres dépenses"
+        subtitle="Ajoutez les dépenses courantes du foyer."
+        total={fmtMoney(total)}
+      />
 
       {/* Quick presets (tap = auto-next). */}
       <div className="wizChips" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -2456,7 +3399,7 @@ case "daily": {
               key={p.key}
               type="button"
               className={`wizChip ${active ? "isActive" : ""}`}
-              onClick={() => applyPresetAndContinue(p.key)}
+              onClick={() => applyPreset(p.key)}
               title={`${p.label} — ${p.hint}`}
             >
               <span style={{ fontWeight: 900 }}>{p.label}</span>
@@ -2465,49 +3408,95 @@ case "daily": {
           );
         })}
 
-        <button
-          type="button"
-          className={`wizChip ${dailyInteracted ? "isActive" : ""}`}
-          onClick={() => setDailyInteracted(true)}
-          title="Ajuster manuellement"
-        >
-          <span style={{ fontWeight: 900 }}>Personnalisé</span>
-          <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Ajuster</span>
-        </button>
       </div>
 
-      {[
-        { k: "courses", label: "Courses", sub: "Alimentation, hygiène", max: 1500, val: courses },
-        { k: "loisirs", label: "Loisirs", sub: "Sorties, abonnements, sport", max: 1500, val: loisirs },
-        { k: "sante", label: "Santé", sub: "Mutuelle, pharmacie", max: 800, val: sante },
-      ].map((s) => (
-        <div key={s.k} className="card" style={{ padding: 14, display: "grid", gap: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <div>
-              <div style={{ fontWeight: 900 }}>{s.label}</div>
-              <div className="muted" style={{ fontSize: 13 }}>{s.sub}</div>
-            </div>
-            <div style={{ fontWeight: 900 }}>{fmtMoney(s.val)}</div>
-          </div>
-
-          <input
-            type="range"
-            min={0}
-            max={s.max}
-            step={10}
-            value={s.val}
-            onChange={(e) => {
+      <div style={{ display: "grid", gap: 12 }}>
+        <BudgetSection
+          title="Vie courante"
+          base={[
+            { key: "courses", label: "Courses" },
+            { key: "transport", label: "Transport" },
+            { key: "sante", label: "Santé" },
+          ]}
+          values={daily}
+          onValue={(key, val) => {
+            setDailyInteracted(true);
+            setDailyPresetUsed(null);
+            setDailyField(key, num(val));
+          }}
+          custom={{
+            lines: ((daily as any)?.customVieCourante ?? []) as Array<any>,
+            onAdd: () => {
               setDailyInteracted(true);
               setDailyPresetUsed(null);
-              setDailyField(s.k, num(e.target.value));
-            }}
-          />
-        </div>
-      ))}
+              setDaily((prev: any) => ({
+                ...(prev ?? {}),
+                customVieCourante: [...(((prev ?? {}) as any).customVieCourante ?? []), { id: uid("dvc"), name: "", amount: 0, stage: "name", period: "month" }],
+              }));
+            },
+            onUpdate: (id, patch) => {
+              setDailyInteracted(true);
+              setDailyPresetUsed(null);
+              setDaily((prev: any) => ({
+                ...(prev ?? {}),
+                customVieCourante: ((((prev ?? {}) as any).customVieCourante ?? []) as Array<any>).map((line: any) =>
+                  line.id === id ? { ...line, ...patch } : line
+                ),
+              }));
+            },
+            onRemove: (id) => {
+              setDailyInteracted(true);
+              setDailyPresetUsed(null);
+              setDaily((prev: any) => ({
+                ...(prev ?? {}),
+                customVieCourante: ((((prev ?? {}) as any).customVieCourante ?? []) as Array<any>).filter((line: any) => line.id !== id),
+              }));
+            },
+          }}
+        />
 
-      <div className="card" style={{ padding: 14, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <div className="muted">Total estimé</div>
-        <div style={{ fontWeight: 900, fontSize: 18 }}>{fmtMoney(total)}</div>
+        <BudgetSection
+          title="Loisirs & divers"
+          base={[
+            { key: "loisirs", label: "Loisirs" },
+            { key: "autres", label: "Autres" },
+          ]}
+          values={daily}
+          onValue={(key, val) => {
+            setDailyInteracted(true);
+            setDailyPresetUsed(null);
+            setDailyField(key, num(val));
+          }}
+          custom={{
+            lines: ((daily as any)?.customLoisirs ?? []) as Array<any>,
+            onAdd: () => {
+              setDailyInteracted(true);
+              setDailyPresetUsed(null);
+              setDaily((prev: any) => ({
+                ...(prev ?? {}),
+                customLoisirs: [...(((prev ?? {}) as any).customLoisirs ?? []), { id: uid("dld"), name: "", amount: 0, stage: "name", period: "month" }],
+              }));
+            },
+            onUpdate: (id, patch) => {
+              setDailyInteracted(true);
+              setDailyPresetUsed(null);
+              setDaily((prev: any) => ({
+                ...(prev ?? {}),
+                customLoisirs: ((((prev ?? {}) as any).customLoisirs ?? []) as Array<any>).map((line: any) =>
+                  line.id === id ? { ...line, ...patch } : line
+                ),
+              }));
+            },
+            onRemove: (id) => {
+              setDailyInteracted(true);
+              setDailyPresetUsed(null);
+              setDaily((prev: any) => ({
+                ...(prev ?? {}),
+                customLoisirs: ((((prev ?? {}) as any).customLoisirs ?? []) as Array<any>).filter((line: any) => line.id !== id),
+              }));
+            },
+          }}
+        />
       </div>
 
       <div className="wizardNav wizBottomBar">
@@ -2621,10 +3610,18 @@ default:
                 const done = completedSteps.includes(s.step);
                 const skipped = skippedSteps.includes(s.step);
                 const muted = !current && !done;
+                const canJump = current || visitedSteps.includes(s.step);
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={s.step}
                     className={`wizardStep ${current ? "wizardStepActive" : ""} ${done ? "wizardStepDone" : ""} ${muted ? "wizardStepMuted" : ""} ${skipped ? "wizardStepSkipped" : ""}`}
+                    onClick={() => {
+                      if (!canJump) return;
+                      goToStep(s.step);
+                    }}
+                    disabled={!canJump}
+                    aria-current={current ? "step" : undefined}
                   >
                     <span className="wizStepIdx" aria-hidden="true">{idx + 1}</span>
                     <span className={`wizStepIcon ${current ? "isActive" : ""}`} aria-hidden="true"><StepIcon step={s.step} /></span>
@@ -2634,7 +3631,7 @@ default:
                     <span className="wizStepMeta" aria-hidden="true">
                       {done ? "✓" : skipped ? "—" : ""}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>

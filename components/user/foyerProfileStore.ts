@@ -10,6 +10,9 @@ export type RentalRow = {
   id: string;
   kind: "appartement" | "maison";
   ville: string;
+  villeCode?: string;
+  villeCodePostal?: string;
+  villeDepartement?: string;
   superficie?: number;
 
   /** Loyer */
@@ -46,6 +49,9 @@ export type OwnerRow = {
   id: string;
   kind: "appartement" | "maison";
   ville: string;
+  villeCode?: string;
+  villeCodePostal?: string;
+  villeDepartement?: string;
   superficie?: number;
 
   /** Usage du bien */
@@ -57,6 +63,8 @@ export type OwnerRow = {
 
   /** Charges / taxes (inputs used for budget estimations) */
   chargesCopro?: number;
+  mensualiteEmprunt?: number;
+  assuranceEmprunt?: number;
 
   taxeFonciere?: number;
   taxeFoncierePeriod?: MoneyPeriod; // default: year
@@ -92,6 +100,8 @@ export type DailyLife = {
   loisirs?: number;
   sante?: number;
   autres?: number;
+  customVieCourante?: CustomMoneyLine[];
+  customLoisirs?: CustomMoneyLine[];
 };
 
 export type FoyerProfile = {

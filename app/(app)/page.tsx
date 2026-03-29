@@ -19,8 +19,8 @@ export default function HomePage() {
       <div className="card" style={{ padding: 14, display: "grid", gap: 10 }}>
         <div style={{ fontWeight: 900 }}>Menu</div>
 
-        <Link href="/foyers" className="btnPrimary" style={{ textDecoration: "none", textAlign: "center" }}>
-          Consulter le budget d’un foyer existant
+        <Link href="/dashboard" className="btnPrimary" style={{ textDecoration: "none", textAlign: "center" }}>
+          Accéder au Budget
         </Link>
 
         <Link href="/onboarding" className="btnSecondary" style={{ textDecoration: "none", textAlign: "center" }}>

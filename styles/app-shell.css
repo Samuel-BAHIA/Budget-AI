@@ -452,6 +452,70 @@ html, body {
   padding: 16px;
 }
 
+/* Wizard onboarding: fill the viewport once; scroll only inside .wizardContentBody (no document + panel). */
+.main.mainIsWizard {
+  padding: 0;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  min-height: 100dvh;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.main.mainIsWizard > .pageTransition {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+.main.mainIsWizard .wizardWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+/* flex: 1 plutôt que height 100% : avec wizardCrumbSpacer en frère, 100% + spacer débordait
+   et overflow:hidden sur .wizardWrap coupait le bas de la carte (bordure inférieure invisible). */
+.main.mainIsWizard .wizardLayout {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  max-height: none;
+}
+
+@media (min-width: 721px) {
+  .main.mainIsWizard {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .main.mainIsWizard > .pageTransition {
+    overflow: hidden;
+  }
+
+  .main.mainIsWizard .wizardWrap {
+    max-height: 100%;
+    overflow-y: hidden;
+  }
+
+  .main.mainIsWizard .wizardLayout {
+    min-height: calc(100dvh - 48px);
+    height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px);
+  }
+}
+
 .breadcrumbsDesktopOnly {
   display: none;
   margin-bottom: 12px;
@@ -522,6 +586,22 @@ html, body {
     padding-left: 0 !important;
     padding-right: 0 !important;
     margin: 0 !important;
+  }
+
+  .main.mainIsWizard {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden !important;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .main.mainIsWizard > .pageTransition {
+    overflow: hidden !important;
+  }
+
+  .main.mainIsWizard .wizardWrap {
+    max-height: 100%;
+    overflow-y: hidden;
   }
 }
 
@@ -1860,8 +1940,11 @@ html, body {
 .wizardWrap {
   padding: 14px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: stretch;
   min-height: 100dvh;
+  width: 100%;
+  box-sizing: border-box;
   /* Prevent the glow/background layers (and any nested sheets) from creating
      a horizontal scrollbar on mobile browsers. */
   overflow-x: hidden;
@@ -1869,11 +1952,58 @@ html, body {
 
 .wizardLayout {
   max-width: 900px;
+  /* Largeur stable : sans ceci, le flex parent centre une boîte qui se rétrécit au contenu de chaque étape. */
+  width: min(900px, 100%);
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   column-gap: 36px;
   row-gap: 12px;
   align-items: start;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+/* Desktop/Web: keep a stable wizard frame height (content scrolls inside) */
+.wizardLayout{
+  min-height: calc(100dvh - 28px);
+  height: calc(100dvh - 28px);
+  max-height: calc(100dvh - 28px);
+  align-items: stretch;
+}
+
+/* In the onboarding route, let the wizard frame fill remaining flex space
+   below the breadcrumb spacer without forcing a raw 100% height. */
+.main.mainIsWizard .wizardLayout{
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  flex: 1 1 0;
+}
+
+.wizardSidebarCard,
+.wizardContentCard{
+  height: 100%;
+  min-height: 0;
+}
+
+.wizardContentCard{
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wizardSidebarCard{
+  overflow: auto;
+}
+
+.wizardContentBody{
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 96px;
 }
 
 /* Mobile: make the wizard edge-to-edge and fill the available viewport.
@@ -1882,13 +2012,16 @@ html, body {
   .wizardWrap{
     padding: 0;
     width: 100%;
-    justify-content: stretch;
     min-height: 100dvh;
   }
 
   .wizardLayout{
     max-width: 100%;
     width: 100%;
+    align-self: stretch;
+    height: auto;
+    min-height: calc(100dvh - 28px);
+    max-height: none;
     grid-template-columns: 1fr;
     column-gap: 0;
     row-gap: 0;
@@ -1937,6 +2070,21 @@ html, body {
     bottom: 0;
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
+
+  /* Évite min-heights 100dvh + scroll interne = double défilement (mobile). */
+  .main.mainIsWizard .wizardLayout{
+    grid-template-rows: minmax(0, 1fr);
+    flex: 1 1 0;
+    max-height: none;
+    min-height: 0;
+  }
+  .main.mainIsWizard .wizardContentCard{
+    min-height: 0;
+    height: 100%;
+  }
+  .main.mainIsWizard .wizardContentInner{
+    min-height: 0;
+  }
 }
 
 .wizardLayout > .card{width:100%; margin:0 !important; min-width:0;}
@@ -1956,11 +2104,19 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(0, 0, 0, 0.02);
   font-size: 13px;
+  text-align: left;
+  cursor: default;
+}
+
+button.wizardStep {
+  appearance: none;
+  cursor: pointer;
 }
 
 .wizardStep .chev {
@@ -2011,6 +2167,21 @@ html, body {
 :root{
   --wiz-accent: #3b82f6;
   --wiz-accent-2: #8b5cf6;
+  --wiz-panel-bg:
+    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)),
+    linear-gradient(135deg, rgba(59,130,246,0.16), rgba(139,92,246,0.10));
+  --wiz-panel-border: rgba(59,130,246,0.20);
+  --wiz-icon-bg:
+    linear-gradient(180deg, rgba(255,255,255,0.30), rgba(255,255,255,0.08)),
+    linear-gradient(135deg, rgba(59,130,246,0.22), rgba(139,92,246,0.14));
+  --wiz-soft-btn-bg: linear-gradient(135deg, rgba(59,130,246,0.16), rgba(139,92,246,0.10));
+  --wiz-soft-btn-bg-hover: linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.12));
+  --wiz-elevated-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.34),
+    inset 0 12px 24px rgba(255,255,255,0.06),
+    0 16px 30px rgba(11,18,32,0.10),
+    0 28px 62px rgba(59,130,246,0.18),
+    0 0 0 1px rgba(255,255,255,0.10);
   --wiz-ink: #0b1220;
   --wiz-muted: rgba(11,18,32,0.66);
   --wiz-border: rgba(11,18,32,0.10);
@@ -2046,8 +2217,9 @@ html, body {
 }
 
 .wizardContentCard{ padding: 14px; }
-.wizardContentInner{ display:flex; flex-direction:column; gap: 12px; min-height: 0; }
-.wizardContentBody{ flex: 1; min-height: 0; }
+.wizardContentInner{ display:flex; flex-direction:column; gap: 12px; flex: 1; min-height: 0; }
+.wizardStepAnim{ flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wizardStepAnim > .wizardPanel{ flex: 1; min-height: 0; }
 
 .wizTopProgress{ display:grid; gap:10px; }
 .wizTopProgressRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -2112,17 +2284,132 @@ html, body {
   gap:12px;
   padding:14px;
   border-radius: var(--wiz-radius);
-  border:1px solid var(--wiz-border);
-  background: var(--wiz-surface-2);
-  box-shadow: var(--wiz-shadow-sm);
+  border:1px solid rgba(59,130,246,0.16);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.08)),
+    linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.10));
+  box-shadow: var(--wiz-elevated-shadow);
   cursor:pointer;
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
 }
-.wizChoiceCard:hover{ transform: translateY(-1px); box-shadow: 0 18px 44px rgba(11,18,32,0.12); }
+.wizChoiceCard:hover{
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.38),
+    inset 0 12px 24px rgba(255,255,255,0.08),
+    0 22px 42px rgba(11,18,32,0.14),
+    0 40px 92px rgba(59,130,246,0.28),
+    0 0 0 1px rgba(255,255,255,0.12);
+}
 .wizChoiceCard:active{ transform: translateY(0px) scale(0.995); }
 .wizChoiceCard.isSelected{
-  border-color: rgba(59,130,246,0.45);
-  box-shadow: 0 18px 44px rgba(59,130,246,0.18);
+  border-color: rgba(59,130,246,0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.40),
+    inset 0 12px 24px rgba(255,255,255,0.08),
+    0 22px 42px rgba(11,18,32,0.14),
+    0 42px 96px rgba(59,130,246,0.30),
+    0 0 0 1px rgba(255,255,255,0.12);
+}
+
+.foyerHero {
+  display: grid;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+
+.foyerChoiceGrid {
+  display: grid;
+  gap: 12px;
+  padding: 22px 18px 34px;
+  overflow: visible;
+}
+
+.foyerChoiceGrid .wizChoiceCard {
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.08)),
+    linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.10));
+  border: 1px solid rgba(59,130,246,0.16);
+  box-shadow: var(--wiz-elevated-shadow);
+}
+
+.foyerChoiceGrid .wizChoiceIcon {
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.12)),
+    linear-gradient(135deg, rgba(59,130,246,0.24), rgba(139,92,246,0.14));
+  border: 1px solid rgba(59,130,246,0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.32),
+    0 10px 24px rgba(59,130,246,0.10);
+  color: #215dc6;
+}
+
+.foyerPersonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 22px 18px 34px;
+  overflow: visible;
+}
+
+.foyerPersonCard {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.08)),
+    linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.10));
+  border: 1px solid rgba(59,130,246,0.16);
+  box-shadow: var(--wiz-elevated-shadow);
+  overflow: visible;
+}
+
+.foyerPersonHead {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.foyerPersonIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.12)),
+    linear-gradient(135deg, rgba(59,130,246,0.24), rgba(139,92,246,0.14));
+  border: 1px solid rgba(59,130,246,0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.30),
+    0 10px 24px rgba(59,130,246,0.10);
+}
+
+.foyerPersonTitle {
+  font-weight: 900;
+  font-size: 16px;
+  color: rgba(11,18,32,0.92);
+}
+
+.foyerPersonSubtitle {
+  font-size: 12px;
+  color: rgba(11,18,32,0.60);
+}
+
+.foyerField {
+  display: grid;
+  gap: 6px;
+}
+
+@media (max-width: 760px) {
+  .foyerPersonGrid {
+    grid-template-columns: 1fr;
+  }
 }
 .wizChoiceIcon{
   width:48px;
@@ -2143,11 +2430,13 @@ html, body {
 .wizYesNoBtn{
   height: 62px;
   border-radius: var(--wiz-radius);
-  border: 1px solid var(--wiz-border);
-  background: var(--wiz-surface-2);
+  border: 1px solid rgba(59,130,246,0.16);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.08)),
+    linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.10));
   font-weight: 950;
   cursor: pointer;
-  box-shadow: var(--wiz-shadow-sm);
+  box-shadow: var(--wiz-elevated-shadow);
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
   display: grid;
   grid-template-columns: 42px minmax(0,1fr) 18px;
@@ -2156,10 +2445,23 @@ html, body {
   padding: 12px 14px;
   text-align: left;
 }
-.wizYesNoBtn:hover{ transform: translateY(-1px); box-shadow: 0 18px 44px rgba(11,18,32,0.12); }
+.wizYesNoBtn:hover{
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.38),
+    inset 0 12px 24px rgba(255,255,255,0.08),
+    0 22px 42px rgba(11,18,32,0.14),
+    0 40px 92px rgba(59,130,246,0.28),
+    0 0 0 1px rgba(255,255,255,0.12);
+}
 .wizYesNoBtn.isActive{
   border-color: rgba(59,130,246,0.45);
-  box-shadow: 0 18px 44px rgba(59,130,246,0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.40),
+    inset 0 12px 24px rgba(255,255,255,0.08),
+    0 22px 42px rgba(11,18,32,0.14),
+    0 42px 96px rgba(59,130,246,0.30),
+    0 0 0 1px rgba(255,255,255,0.12);
 }
 
 .wizYNIcon{
@@ -2326,7 +2628,7 @@ html, body {
 
 /* Panel without a visible card outline (used for wizard content blocks) */
 .wizardPanel {
-  padding: 0;
+  padding: 22px 18px 34px;
   border: none;
   background: transparent;
 }
@@ -2448,59 +2750,151 @@ html, body {
 }
 
 /* === Incomes (premium) === */
-.incomeTop {
+.incomeTop,
+.wizardSectionTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 2px 0 4px;
+}
+
+.incomeGlobalChip,
+.wizardMetricChip {
+  border-radius: 16px;
+  padding: 10px 12px;
+  border: 1px solid rgba(59,130,246,0.18);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06)),
+    linear-gradient(135deg, rgba(59,130,246,0.12), rgba(139,92,246,0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.24),
+    0 12px 28px rgba(59,130,246,0.10);
+  display: grid;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.incomeGlobalChipLabel,
+.wizardMetricChipLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(11,18,32,0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.incomeGlobalChipValue,
+.wizardMetricChipValue {
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1;
+  color: #15803d;
+}
+
+.wizardMetricChipNote {
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(11,18,32,0.54);
+}
+
+.incomeCard {
+  border-radius: 20px;
+  border: 1px solid rgba(59,130,246,0.18);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)),
+    linear-gradient(135deg, rgba(59,130,246,0.14), rgba(139,92,246,0.08));
+  box-shadow: var(--wiz-elevated-shadow);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.incomeTaxSummaryCard {
+  border-radius: 20px;
+  border: 1px solid rgba(59,130,246,0.18);
+  background: var(--wiz-panel-bg);
+  box-shadow: var(--wiz-elevated-shadow);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.incomeTaxSummaryHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.incomeGlobalChip {
-  border-radius: 999px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.06);
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.incomeGlobalChipLabel {
-  font-size: 12px;
-  opacity: 0.75;
-}
-
-.incomeGlobalChipValue {
+.incomeTaxSummaryTitle {
   font-weight: 900;
+  color: rgba(11,18,32,0.92);
 }
 
-.incomeCard {
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 12px;
+.incomeTaxSummaryHint {
+  font-size: 12px;
+  color: rgba(11,18,32,0.60);
+  margin-top: 2px;
+}
+
+.incomeTaxSummaryGrid,
+.incomeTaxMetaGrid {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.incomeTaxMetaGrid {
+  padding-top: 2px;
+}
+
+.incomeTaxPill {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(59,130,246,0.12);
+  background: rgba(255,255,255,0.22);
+}
+
+.incomeTaxPillLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(11,18,32,0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.incomeTaxPillValue {
+  font-size: 14px;
+  font-weight: 900;
+  color: #215dc6;
 }
 
 .incomeCardHead {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .incomeAvatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   font-weight: 900;
   letter-spacing: 0.5px;
-  background: rgba(59, 130, 246, 0.18);
-  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #215dc6;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.30), rgba(255,255,255,0.08)),
+    linear-gradient(135deg, rgba(59,130,246,0.20), rgba(139,92,246,0.12));
+  border: 1px solid rgba(59,130,246,0.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.24);
 }
 
 .incomeHeadMeta {
@@ -2509,32 +2903,50 @@ html, body {
 
 .incomePersonName {
   font-weight: 900;
+  color: rgba(11,18,32,0.92);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.incomePersonTotalWrap {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+
+.incomeTaxTotalNote {
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(11,18,32,0.54);
+  text-align: right;
+}
+
 .incomePersonHint {
   font-size: 12px;
-  opacity: 0.7;
+  color: rgba(11,18,32,0.60);
   margin-top: 2px;
 }
 
 .incomePersonTotal {
   font-weight: 900;
   white-space: nowrap;
+  color: #15803d;
+  font-size: 16px;
 }
 
 .incomeRows {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .incomeEmpty {
   border-radius: 12px;
-  padding: 10px;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+  border: 1px dashed rgba(11,18,32,0.18);
+  background: rgba(255,255,255,0.30);
+  color: rgba(11,18,32,0.68);
 }
 
 .incomeEmptyTitle {
@@ -2549,9 +2961,14 @@ html, body {
 
 .incomeRowNew {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 40px;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 140px) 40px;
   gap: 8px;
   align-items: center;
+  min-width: 0;
+  padding: 8px 0;
+  border-radius: 16px;
+  background: transparent;
+  border: none;
 }
 
 .incomeLabelWrap {
@@ -2567,22 +2984,39 @@ html, body {
   border-radius: 10px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: transparent;
+  border: none;
   flex: 0 0 auto;
 }
 
 .incomeLabelInput {
   min-width: 0;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid rgba(33,93,198,0.18);
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-weight: 800;
+  color: rgba(11,18,32,0.92);
+}
+
+.incomeLabelInput:focus {
+  border-bottom-color: rgba(33,93,198,0.38);
 }
 
 .incomeAmountWrap {
   position: relative;
+  min-width: 0;
 }
 
 .incomeAmountInput {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding-right: 30px;
   text-align: right;
+  box-sizing: border-box;
 }
 
 .incomeAmountSuffix {
@@ -2591,22 +3025,22 @@ html, body {
   top: 50%;
   transform: translateY(-50%);
   font-weight: 900;
-  opacity: 0.7;
+  color: rgba(33,93,198,0.72);
   pointer-events: none;
 }
 
 .iconBtn {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  border: none;
+  background: transparent;
   color: inherit;
   cursor: pointer;
 }
 
 .iconBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent;
 }
 
 .incomeQuickAdd {
@@ -2618,15 +3052,18 @@ html, body {
 .chipBtn {
   border-radius: 999px;
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(59,130,246,0.12);
+  background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.05));
+  color: rgba(33,93,198,0.86);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(59,130,246,0.06);
 }
 
 .chipBtn:hover {
-  background: rgba(255, 255, 255, 0.10);
+  background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(139,92,246,0.06));
 }
 
 .chipBtn.isGhost {
@@ -2634,13 +3071,24 @@ html, body {
 }
 
 @media (max-width: 760px) {
-  .incomeTop {
+  .incomeTop,
+  .wizardSectionTop {
+    flex-wrap: wrap;
     align-items: center;
   }
   .incomeRowNew {
     grid-template-columns: 1fr;
   }
+  .incomeAmountWrap {
+    width: 100%;
+  }
   .incomeAmountInput {
+    text-align: left;
+  }
+  .incomePersonTotalWrap {
+    justify-items: start;
+  }
+  .incomeTaxTotalNote {
     text-align: left;
   }
 }
@@ -4405,9 +4853,441 @@ html, body {
   transition: opacity 0.15s ease;
 }
 .bienCard:hover .bienActions,
-.bienCard:focus-within .bienActions {
+.bienCard:focus-within .bienActions,
+.ownerCardWrap:hover .bienActions,
+.ownerCardWrap:focus-within .bienActions {
   opacity: 1;
   pointer-events: auto;
+}
+
+.ownerList {
+  display: grid;
+  gap: 12px;
+}
+
+.ownerCardWrap {
+  display: grid;
+  gap: 6px;
+}
+
+.ownerEmptyState,
+.wizardEmptyState {
+  padding: 18px 16px;
+  display: grid;
+  gap: 8px;
+  place-items: center;
+  text-align: center;
+  border: 1px dashed rgba(11,18,32,0.18);
+  background: rgba(255,255,255,0.46);
+  color: var(--wiz-muted);
+}
+
+.ownerEmptyIcon,
+.wizardEmptyIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  background: var(--wiz-soft-btn-bg);
+  border: 1px solid rgba(59,130,246,0.22);
+}
+
+.ownerCard {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  border-radius: 20px;
+  background: var(--wiz-panel-bg);
+  border: 1px solid var(--wiz-panel-border);
+  box-shadow: var(--wiz-elevated-shadow);
+}
+
+.ownerCardHead {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.ownerCardIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  background: var(--wiz-icon-bg);
+  border: 1px solid rgba(59,130,246,0.22);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.24);
+}
+
+.ownerCardMeta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.ownerCardTitle {
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: rgba(11,18,32,0.92);
+  text-transform: capitalize;
+}
+
+.ownerCardSubtitle {
+  font-size: 12px;
+  color: rgba(11,18,32,0.60);
+}
+
+.ownerCardAmount {
+  font-weight: 950;
+  white-space: nowrap;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.ownerCardAmount.isPositive { color: #15803d; }
+.ownerCardAmount.isNegative { color: #dc2626; }
+
+.ownerCardAmountBox {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(33,93,198,0.10);
+}
+
+.ownerCardAmountLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(33,93,198,0.70);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ownerCardStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.ownerStatPill {
+  display: inline-grid;
+  gap: 4px;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.ownerStatLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(11,18,32,0.82);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ownerStatValue {
+  font-size: 13px;
+  font-weight: 900;
+  color: #215dc6;
+  text-transform: capitalize;
+}
+
+.ownerIconAction {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(33,93,198,0.10);
+  background: rgba(255,255,255,0.28);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ownerIconAction:hover {
+  background: rgba(255,255,255,0.46);
+  transform: translateY(-1px);
+}
+
+.ownerCardHoverActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 0;
+}
+
+.ownerModalCard {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  border-radius: 20px;
+  background: var(--wiz-panel-bg);
+  border: 1px solid var(--wiz-panel-border);
+  box-shadow: var(--wiz-elevated-shadow);
+}
+
+.ownerModalCardStep2 {
+  animation: ownerPanelSlideIn 240ms cubic-bezier(.2,.9,.2,1) both;
+}
+
+.wizardWrap .ownerNextExpensesBtn.btnSecondary,
+.wizardWrap .wizardSecondaryBtn.btnSecondary {
+  color: var(--wiz-accent);
+  border-color: rgba(59,130,246,0.22);
+  background: var(--wiz-soft-btn-bg);
+  box-shadow: 0 18px 38px rgba(59,130,246,0.12);
+}
+
+.wizardWrap .ownerNextExpensesBtn.btnSecondary:hover:not(:disabled),
+.wizardWrap .wizardSecondaryBtn.btnSecondary:hover:not(:disabled) {
+  background: var(--wiz-soft-btn-bg-hover);
+  box-shadow: 0 18px 38px rgba(59,130,246,0.14);
+}
+
+.wizardWrap .wizardSecondaryBtnStrong.btnSecondary {
+  color: var(--wiz-accent);
+  border-color: rgba(59,130,246,0.24);
+  background: var(--wiz-soft-btn-bg);
+  box-shadow: 0 18px 38px rgba(59,130,246,0.14);
+}
+
+.wizardWrap .wizardSecondaryBtnStrong.btnSecondary:hover:not(:disabled) {
+  background: var(--wiz-soft-btn-bg-hover);
+  box-shadow: 0 20px 42px rgba(59,130,246,0.16);
+}
+
+.ownerModalCard .btnAddSmall,
+.ownerModalCard .miniAddBtn,
+.ownerModalCard .inputLikeBtn {
+  border-color: rgba(59,130,246,0.16);
+  background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.05));
+  color: rgba(33,93,198,0.68);
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(59,130,246,0.06);
+}
+
+.ownerModalCard .btnAddSmall:hover,
+.ownerModalCard .miniAddBtn:hover,
+.ownerModalCard .inputLikeBtn:hover {
+  background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(139,92,246,0.06));
+}
+
+@keyframes ownerPanelSlideIn {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.wizardWrap .ownerAddBtn.btnPrimary,
+.wizardWrap .wizardAddBtn.btnPrimary {
+  min-height: 52px;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 900;
+  color: var(--wiz-accent);
+  border-color: rgba(59,130,246,0.22);
+  background: var(--wiz-soft-btn-bg);
+  box-shadow: 0 18px 38px rgba(59,130,246,0.12);
+}
+
+.ownerEmptyAddBtn,
+.wizardAddBtnStacked {
+  min-width: 220px;
+  min-height: 74px;
+  display: grid !important;
+  gap: 4px;
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+  margin-top: 6px;
+}
+
+.ownerEmptyAddIcon,
+.wizardAddBtnIcon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.wizardWrap .ownerAddBtn.btnPrimary:hover:not(:disabled),
+.wizardWrap .wizardAddBtn.btnPrimary:hover:not(:disabled) {
+  background: var(--wiz-soft-btn-bg-hover);
+  box-shadow: 0 18px 38px rgba(59,130,246,0.14);
+}
+
+.wizardFormActions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wizardInlineFieldGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.wizardOccupantPicker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wizardOccupantBtn {
+  min-height: 52px;
+  border-radius: 16px;
+  border: 1px solid rgba(59,130,246,0.16);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.08)),
+    linear-gradient(135deg, rgba(59,130,246,0.10), rgba(139,92,246,0.06));
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  color: rgba(11,18,32,0.74);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.wizardOccupantBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(59,130,246,0.10);
+}
+
+.wizardOccupantBtn.isActive {
+  border-color: rgba(59,130,246,0.32);
+  background: var(--wiz-soft-btn-bg);
+  color: var(--wiz-accent);
+  box-shadow: 0 16px 34px rgba(59,130,246,0.12);
+}
+
+.wizardOccupantBtnIcon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.wizardOccupantBtnText {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cityAutocompleteField {
+  position: relative;
+}
+
+.cityAutocompleteMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(59,130,246,0.16);
+  background: rgba(255,255,255,0.94);
+  box-shadow: 0 18px 40px rgba(11,18,32,0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.cityAutocompleteItem {
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  padding: 10px 12px;
+  text-align: left;
+  color: rgba(11,18,32,0.82);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cityAutocompleteItem:hover {
+  background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(139,92,246,0.06));
+}
+
+.cityAutocompleteEmpty {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: rgba(11,18,32,0.56);
+}
+
+.moneySuggestionBtn {
+  justify-self: start;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(33,93,198,0.68);
+  cursor: pointer;
+}
+
+.moneySuggestionBtn:hover {
+  color: rgba(33,93,198,0.88);
+  text-decoration: underline;
+}
+
+@media (max-width: 820px) {
+  .ownerCardHead {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+
+  .ownerCardMeta {
+    grid-column: 2 / 3;
+  }
+
+  .ownerCardAmountBox {
+    grid-column: 2 / 3;
+    justify-items: start;
+  }
+
+  .ownerCardInlineActions {
+    grid-column: 3 / 4;
+    align-self: start;
+    margin-left: 0;
+  }
+
+  .ownerCardStats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .ownerCardHead {
+    row-gap: 8px;
+    align-items: start;
+  }
+
+  .ownerCardStats {
+    grid-template-columns: 1fr;
+  }
+
+  .wizardInlineFieldGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* --- Responsive wizard layout --- */
@@ -4432,6 +5312,7 @@ html, body {
   .wizardWrap{ padding: 10px; }
   .wizardLayout{
     max-width: 760px;
+    width: min(760px, 100%);
     grid-template-columns: 1fr;
     row-gap: 12px;
   }
@@ -4458,7 +5339,9 @@ html, body {
     align-items: stretch;
   }
   .wizardLayout > .card{
-    min-height: calc(100vh - 140px);
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
     display: flex;
     flex-direction: column;
   }
@@ -4676,7 +5559,7 @@ html, body {
 }
 .wizardCrumbItem:last-child .wizardCrumbSep{ display:none; }
 
-.wizardCrumbSpacer{ display:none; height: 44px; }
+.wizardCrumbSpacer{ display:none; width: 100%; flex-shrink: 0; height: 44px; }
 
 @media (max-width: 820px){
   .wizardCrumbSpacer{ display:block; }
@@ -4722,7 +5605,7 @@ html, body {
   :root {
   }
 
-  .main {
+  .main:not(.mainIsWizard) {
     padding-bottom: env(safe-area-inset-bottom) !important;
   }
 }

@@ -27,10 +27,10 @@ export type MenuGroup = {
 
 export const sidebarNavGroups: MenuGroup[] = [
   {
-    // Keep title empty: we don't want a visible "Dashboard" header in the sidebar.
     title: "",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: "📊" },
+      { href: "/", label: "Accueil", icon: "⌂" },
+      { href: "/dashboard", label: "Budget", icon: "📊" },
     ],
   },
 ];
