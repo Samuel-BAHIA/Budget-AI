@@ -13,6 +13,9 @@ type Props = {
 const navItems: { href: string; label: string; icon: string }[] = [
   { href: "/", label: "Accueil", icon: "⌂" },
   { href: "/dashboard", label: "Budget", icon: "📊" },
+  { href: "/utilisateurs", label: "Utilisateurs", icon: "👤" },
+  { href: "/foyers", label: "Foyers", icon: "🏠" },
+  { href: "/graph/view", label: "Graph", icon: "📈" },
 ];
 
 export default function SidebarDrawer({ open, onClose, children }: Props) {
